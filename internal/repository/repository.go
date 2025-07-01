@@ -1,33 +1,46 @@
 package repository
 
-import "sync"
+import (
+	"errors"
+	"fmt"
+	"sync"
 
-type MetricsStorage interface {
-	UpdateGauge(id string, value float64)
-	UpdateCounter(id string, delta int64)
-}
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/model"
+)
 
 type MemStorage struct {
-	mu       sync.Mutex
+	mu       *sync.Mutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
+		mu:       &sync.Mutex{},
 		gauges:   make(map[string]float64),
 		counters: make(map[string]int64),
 	}
 }
 
-func (m *MemStorage) UpdateGauge(id string, value float64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.gauges[id] = value
-}
+func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
+	switch metric.MType {
+	case model.Gauge:
+		if metric.Value == nil {
+			return errors.New("nil gauge value")
+		}
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.gauges[metric.ID] = *metric.Value
+	case model.Counter:
+		if metric.Delta == nil {
+			return errors.New("nil counter delta")
+		}
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.counters[metric.ID] += *metric.Delta
+	default:
+		return fmt.Errorf("unsupported metric type: %s", metric.MType)
+	}
 
-func (m *MemStorage) UpdateCounter(id string, delta int64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.counters[id] += delta
+	return nil
 }

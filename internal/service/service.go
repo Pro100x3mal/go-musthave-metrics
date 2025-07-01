@@ -2,18 +2,13 @@ package service
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/model"
 )
 
-var (
-	ErrUnsupportedMetricValue = errors.New("unsupported metric value")
-	ErrUnsupportedMetricType  = errors.New("unsupported metric type")
-)
-
 type MetricsRepository interface {
-	UpdateGauge(id string, value float64)
-	UpdateCounter(id string, delta int64)
+	UpdateMetrics(metric *model.Metrics) error
 }
 type MetricsService struct {
 	repo MetricsRepository
@@ -25,21 +20,36 @@ func NewMetricsService(repo MetricsRepository) *MetricsService {
 	}
 }
 
-func (ms *MetricsService) UpdateMetrics(m *model.Metrics) error {
-	switch m.MType {
+var (
+	ErrInvalidMetricValue    = errors.New("invalid metric value")
+	ErrUnsupportedMetricType = errors.New("unsupported metric type")
+)
+
+func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
+	var metric model.Metrics
+	metric.ID = mName
+	metric.MType = mType
+
+	switch mType {
 	case model.Gauge:
-		if m.Value == nil {
-			return ErrUnsupportedMetricValue
+		value, err := strconv.ParseFloat(mValue, 64)
+		if err != nil {
+			return ErrInvalidMetricValue
 		}
-		ms.repo.UpdateGauge(m.ID, *m.Value)
+		metric.Value = &value
 	case model.Counter:
-		if m.Delta == nil {
-			return ErrUnsupportedMetricValue
+		delta, err := strconv.ParseInt(mValue, 10, 64)
+		if err != nil {
+			return ErrInvalidMetricValue
 		}
-		ms.repo.UpdateCounter(m.ID, *m.Delta)
+		metric.Delta = &delta
 	default:
 		return ErrUnsupportedMetricType
-
 	}
+
+	if err := ms.repo.UpdateMetrics(&metric); err != nil {
+		return err
+	}
+
 	return nil
 }

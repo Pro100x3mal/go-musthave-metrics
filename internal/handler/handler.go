@@ -1,16 +1,15 @@
 package handler
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/service"
 )
 
 type MetricsUpdater interface {
-	UpdateMetrics(m *model.Metrics) error
+	UpdateMetricFromParams(mType, mName, mValue string) error
 }
 type metricsHandler struct {
 	updater MetricsUpdater
@@ -29,38 +28,21 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 4 || parts[2] == "" {
+	if len(parts) != 4 || parts[2] == "" || parts[3] == "" {
 		http.NotFound(w, r)
 		return
 	}
 
 	mType, mName, mValue := parts[1], parts[2], parts[3]
-
-	var metric model.Metrics
-	metric.ID = mName
-	metric.MType = mType
-
-	switch mType {
-	case model.Gauge:
-		value, err := strconv.ParseFloat(mValue, 64)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid value for %v metric: %s", model.Gauge, mValue), http.StatusBadRequest)
-			return
+	if err := h.updater.UpdateMetricFromParams(mType, mName, mValue); err != nil {
+		switch {
+		case errors.Is(err, service.ErrInvalidMetricValue):
+			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
+		case errors.Is(err, service.ErrUnsupportedMetricType):
+			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
+		default:
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-		metric.Value = &value
-	case model.Counter:
-		delta, err := strconv.ParseInt(mValue, 10, 64)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Invalid value for %v metric: %s", model.Counter, mValue), http.StatusBadRequest)
-			return
-		}
-		metric.Delta = &delta
-	default:
-		http.Error(w, fmt.Sprintf("Unsupported metric type: %s", mType), http.StatusBadRequest)
-	}
-
-	if err := h.updater.UpdateMetrics(&metric); err != nil {
-		http.Error(w, fmt.Sprintf("Update metric failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
