@@ -3,9 +3,9 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/go-chi/chi/v5"
 )
 
 type MetricsUpdater interface {
@@ -27,13 +27,15 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 4 || parts[2] == "" || parts[3] == "" {
+	mType := chi.URLParam(r, "mType")
+	mName := chi.URLParam(r, "mName")
+	mValue := chi.URLParam(r, "mValue")
+
+	if mType == "" || mName == "" || mValue == "" {
 		http.NotFound(w, r)
 		return
 	}
 
-	mType, mName, mValue := parts[1], parts[2], parts[3]
 	if err := h.updater.UpdateMetricFromParams(mType, mName, mValue); err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidMetricValue):

@@ -4,12 +4,14 @@ import (
 	"net/http"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
+	"github.com/go-chi/chi/v5"
 )
 
-func newRouter(mh *metricsHandler) *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /update/", mh.UpdateMetricsHandler)
-	return mux
+func newRouter(mh *metricsHandler) chi.Router {
+	r := chi.NewRouter()
+	r.Post("/update/{mType}/{mName}/{mValue}", mh.UpdateMetricsHandler)
+
+	return r
 }
 
 func Serve(cfg config.ServerConfig, updater MetricsUpdater) error {
