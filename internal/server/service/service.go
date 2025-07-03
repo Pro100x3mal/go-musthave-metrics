@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/model"
 )
 
 type MetricsRepository interface {

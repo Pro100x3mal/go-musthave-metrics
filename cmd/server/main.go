@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/handler"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handler"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
 )
 
 func main() {

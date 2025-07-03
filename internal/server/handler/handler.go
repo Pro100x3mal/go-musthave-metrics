@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
 )
 
 type MetricsUpdater interface {

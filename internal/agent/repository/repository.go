@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
 )
 
 type MemStorage struct {
@@ -43,4 +43,30 @@ func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
 	}
 
 	return nil
+}
+
+func (m *MemStorage) GetAllMetrics() []*model.Metrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var result []*model.Metrics
+	for id, value := range m.gauges {
+		v := value
+		result = append(result, &model.Metrics{
+			ID:    id,
+			MType: model.Gauge,
+			Value: &v,
+		})
+	}
+
+	for id, delta := range m.counters {
+		d := delta
+		result = append(result, &model.Metrics{
+			ID:    id,
+			MType: model.Counter,
+			Delta: &d,
+		})
+	}
+
+	return result
 }

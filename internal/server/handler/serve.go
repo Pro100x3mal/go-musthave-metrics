@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/config"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
 )
 
 func newRouter(mh *metricsHandler) *http.ServeMux {
