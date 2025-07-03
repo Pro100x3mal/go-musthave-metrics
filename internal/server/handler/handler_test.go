@@ -65,9 +65,10 @@ func TestUpdateMetricsHandler(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		h.UpdateMetricsHandler(w, req)
+		resp := w.Result()
 
-		assert.Equal(t, w.Result().StatusCode, tt.wantStatus, "URL %q method %s: expected status %d, got %d", tt.url, tt.method, tt.wantStatus, w.Result().StatusCode)
-
+		assert.Equal(t, resp.StatusCode, tt.wantStatus, "URL %q method %s: expected status %d, got %d", tt.url, tt.method, tt.wantStatus, resp.StatusCode)
+		resp.Body.Close()
 	}
 }
 
@@ -79,6 +80,8 @@ func TestUpdateMetricsHandler_WrongContentType(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.UpdateMetricsHandler(w, req)
+	resp := w.Result()
 
-	assert.Equal(t, w.Result().StatusCode, http.StatusUnsupportedMediaType, "expected status %d, got %d", http.StatusUnsupportedMediaType, w.Result().StatusCode)
+	assert.Equal(t, resp.StatusCode, http.StatusUnsupportedMediaType, "expected status %d, got %d", http.StatusUnsupportedMediaType, resp.StatusCode)
+	resp.Body.Close()
 }
