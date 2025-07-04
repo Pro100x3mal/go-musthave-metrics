@@ -37,7 +37,7 @@ func run() error {
 
 	go func() {
 		for range tickerReport.C {
-			sender.SendMetrics(repo)
+			sender.SendMetrics(repo, cfg)
 		}
 	}()
 

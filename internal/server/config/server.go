@@ -10,7 +10,7 @@ type ServerConfig struct {
 
 func GetConfig() ServerConfig {
 	cfg := ServerConfig{}
-	flag.StringVar(&cfg.ServerAddr, "addr", "localhost:8080", "address of HTTP server")
+	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
 
 	flag.Parse()
 	return cfg
