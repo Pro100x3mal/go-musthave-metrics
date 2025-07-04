@@ -9,6 +9,8 @@ import (
 
 type MetricsRepository interface {
 	UpdateMetrics(metric *model.Metrics) error
+	GetGauge(mName string) (float64, error)
+	GetCounter(mName string) (int64, error)
 }
 type MetricsService struct {
 	repo MetricsRepository
@@ -52,4 +54,23 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 	}
 
 	return nil
+}
+
+func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
+	switch mType {
+	case model.Gauge:
+		value, err := ms.repo.GetGauge(mName)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatFloat(value, 'f', -1, 64), nil
+	case model.Counter:
+		value, err := ms.repo.GetCounter(mName)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(value, 10), nil
+	default:
+		return "", ErrUnsupportedMetricType
+	}
 }

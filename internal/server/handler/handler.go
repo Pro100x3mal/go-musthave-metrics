@@ -4,12 +4,14 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
 	"github.com/go-chi/chi/v5"
 )
 
 type MetricsUpdater interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
+	GetMetricValue(mType, mName string) (string, error)
 }
 type metricsHandler struct {
 	updater MetricsUpdater
@@ -50,4 +52,23 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Request) {
+	mType := chi.URLParam(r, "mType")
+	mName := chi.URLParam(r, "mName")
+
+	mValue, err := h.updater.GetMetricValue(mType, mName)
+	if err != nil {
+		if errors.Is(err, repository.ErrMetricNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(mValue))
 }

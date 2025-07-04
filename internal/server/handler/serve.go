@@ -10,6 +10,7 @@ import (
 func newRouter(mh *metricsHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Post("/update/{mType}/{mName}/{mValue}", mh.UpdateMetricsHandler)
+	r.Get("/value/{mType}/{mName}", mh.GetMetricValueHandler)
 
 	return r
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/model"
 )
 
+var ErrMetricNotFound = errors.New("metric not found")
+
 type MemStorage struct {
 	mu       *sync.Mutex
 	gauges   map[string]float64
@@ -43,4 +45,24 @@ func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
 	}
 
 	return nil
+}
+
+func (m *MemStorage) GetGauge(mName string) (float64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, exist := m.gauges[mName]
+	if !exist {
+		return 0, ErrMetricNotFound
+	}
+	return v, nil
+}
+
+func (m *MemStorage) GetCounter(mName string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, exist := m.counters[mName]
+	if !exist {
+		return 0, ErrMetricNotFound
+	}
+	return v, nil
 }
