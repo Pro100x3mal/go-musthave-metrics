@@ -9,8 +9,9 @@ import (
 
 func newRouter(mh *metricsHandler) chi.Router {
 	r := chi.NewRouter()
-	r.Post("/update/{mType}/{mName}/{mValue}", mh.UpdateMetricsHandler)
+	r.Get("/", mh.ListAllMetricsHandler)
 	r.Get("/value/{mType}/{mName}", mh.GetMetricValueHandler)
+	r.Post("/update/{mType}/{mName}/{mValue}", mh.UpdateMetricsHandler)
 
 	return r
 }

@@ -2,7 +2,11 @@ package handler
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
@@ -12,6 +16,7 @@ import (
 type MetricsUpdater interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
 	GetMetricValue(mType, mName string) (string, error)
+	GetAllMetrics() map[string]string
 }
 type metricsHandler struct {
 	updater MetricsUpdater
@@ -24,11 +29,6 @@ func newMetricsHandler(updater MetricsUpdater) *metricsHandler {
 }
 
 func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "text/plain" {
-		http.Error(w, "Unsupported Content-Type", http.StatusUnsupportedMediaType)
-		return
-	}
-
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
@@ -71,4 +71,26 @@ func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(mValue))
+}
+
+func (h *metricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
+	list := h.updater.GetAllMetrics()
+
+	keys := make([]string, 0, len(list))
+	for name := range list {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	var builder strings.Builder
+	builder.WriteString("<html><body><h1>Metrics</h1><ul>")
+	for _, name := range keys {
+		val := list[name]
+		builder.WriteString(fmt.Sprintf("<li>%s: %s</li>\n", name, val))
+	}
+	builder.WriteString("</ul></body></html>")
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, builder.String())
 }

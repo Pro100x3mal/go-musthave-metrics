@@ -11,14 +11,14 @@ import (
 var ErrMetricNotFound = errors.New("metric not found")
 
 type MemStorage struct {
-	mu       *sync.Mutex
+	mu       *sync.RWMutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
 
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
-		mu:       &sync.Mutex{},
+		mu:       &sync.RWMutex{},
 		gauges:   make(map[string]float64),
 		counters: make(map[string]int64),
 	}
@@ -48,8 +48,8 @@ func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
 }
 
 func (m *MemStorage) GetGauge(mName string) (float64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	v, exist := m.gauges[mName]
 	if !exist {
 		return 0, ErrMetricNotFound
@@ -58,11 +58,23 @@ func (m *MemStorage) GetGauge(mName string) (float64, error) {
 }
 
 func (m *MemStorage) GetCounter(mName string) (int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	v, exist := m.counters[mName]
 	if !exist {
 		return 0, ErrMetricNotFound
 	}
 	return v, nil
+}
+
+func (m *MemStorage) GetAllGauges() map[string]float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.gauges
+}
+
+func (m *MemStorage) GetAllCounters() map[string]int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.counters
 }

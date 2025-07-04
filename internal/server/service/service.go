@@ -11,6 +11,8 @@ type MetricsRepository interface {
 	UpdateMetrics(metric *model.Metrics) error
 	GetGauge(mName string) (float64, error)
 	GetCounter(mName string) (int64, error)
+	GetAllGauges() map[string]float64
+	GetAllCounters() map[string]int64
 }
 type MetricsService struct {
 	repo MetricsRepository
@@ -73,4 +75,17 @@ func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	default:
 		return "", ErrUnsupportedMetricType
 	}
+}
+
+func (ms *MetricsService) GetAllMetrics() map[string]string {
+	list := make(map[string]string)
+
+	for name, value := range ms.repo.GetAllGauges() {
+		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
+	}
+
+	for name, value := range ms.repo.GetAllCounters() {
+		list[name] = strconv.FormatInt(value, 10)
+	}
+	return list
 }

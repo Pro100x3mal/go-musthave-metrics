@@ -57,6 +57,13 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
+func (m *mockUpdater) GetAllMetrics() map[string]string {
+	return map[string]string{
+		"test_counter": "42",
+		"test_gauge":   "3.14",
+	}
+}
+
 func TestUpdateMetricsHandler(t *testing.T) {
 	h := newMetricsHandler(&mockUpdater{})
 	r := newRouter(h)
@@ -98,23 +105,6 @@ func TestUpdateMetricsHandler(t *testing.T) {
 	}
 }
 
-func TestUpdateMetricsHandler_WrongContentType(t *testing.T) {
-	h := newMetricsHandler(&mockUpdater{})
-	r := newRouter(h)
-	ts := httptest.NewServer(r)
-	defer ts.Close()
-
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/update/counter/test/100", nil)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := ts.Client().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, http.StatusUnsupportedMediaType, resp.StatusCode, "expected status %d, got %d", http.StatusUnsupportedMediaType, resp.StatusCode)
-}
-
 func TestGetMetricValueHandler(t *testing.T) {
 	h := newMetricsHandler(&mockUpdater{})
 	r := newRouter(h)
@@ -151,4 +141,24 @@ func TestGetMetricValueHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListAllMetricsHandler(t *testing.T) {
+	h := newMetricsHandler(&mockUpdater{})
+	r := newRouter(h)
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	resp, err := ts.Client().Get(ts.URL + "/")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	html := string(body)
+
+	assert.Contains(t, html, "<li>test_counter: 42</li>")
+	assert.Contains(t, html, "<li>test_gauge: 3.14</li>")
 }
