@@ -14,6 +14,13 @@ import (
 
 type mockUpdater struct{}
 
+func initRouterForTests() http.Handler {
+	mock := &mockUpdater{}
+	receiverHandler := newMetricsUpdateHandler(mock)
+	queryHandler := newMetricsQueryHandler(mock)
+	return newRouter(receiverHandler, queryHandler)
+}
+
 func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error {
 	switch mType {
 	case "counter":
@@ -65,8 +72,7 @@ func (m *mockUpdater) GetAllMetrics() map[string]string {
 }
 
 func TestUpdateMetricsHandler(t *testing.T) {
-	h := newMetricsQueryHandler(&mockUpdater{})
-	r := newRouter(h)
+	r := initRouterForTests()
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -106,8 +112,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 }
 
 func TestGetMetricValueHandler(t *testing.T) {
-	h := newMetricsQueryHandler(&mockUpdater{})
-	r := newRouter(h)
+	r := initRouterForTests()
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
@@ -144,8 +149,7 @@ func TestGetMetricValueHandler(t *testing.T) {
 }
 
 func TestListAllMetricsHandler(t *testing.T) {
-	h := newMetricsQueryHandler(&mockUpdater{})
-	r := newRouter(h)
+	r := initRouterForTests()
 	ts := httptest.NewServer(r)
 	defer ts.Close()
 
