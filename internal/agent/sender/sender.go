@@ -34,7 +34,7 @@ func SendMetrics(queryService *service.MetricsQueryService, cfg config.AgentConf
 			continue
 		}
 
-		url := url.URL{
+		u := url.URL{
 			Scheme: "http",
 			Host:   cfg.ServerAddr,
 			Path:   fmt.Sprintf("/update/%s/%s/%s", m.MType, m.ID, valueStr),
@@ -42,7 +42,7 @@ func SendMetrics(queryService *service.MetricsQueryService, cfg config.AgentConf
 
 		resp, err := client.R().
 			SetHeader("Content-Type", "text/plain").
-			Post(url.String())
+			Post(u.String())
 
 		if err != nil {
 			log.Println("post error:", err)
