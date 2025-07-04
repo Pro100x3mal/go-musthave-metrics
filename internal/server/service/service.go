@@ -17,15 +17,23 @@ type RepositoryReader interface {
 type RepositoryWriter interface {
 	UpdateMetrics(metric *model.Metrics) error
 }
-type MetricsService struct {
-	reader RepositoryReader
+type MetricsReceiverService struct {
 	writer RepositoryWriter
 }
 
-func NewMetricsService(reader RepositoryReader, writer RepositoryWriter) *MetricsService {
-	return &MetricsService{
-		reader: reader,
+type MetricsQueryService struct {
+	reader RepositoryReader
+}
+
+func NewMetricsReceiverService(writer RepositoryWriter) *MetricsReceiverService {
+	return &MetricsReceiverService{
 		writer: writer,
+	}
+}
+
+func NewMetricsQueryService(reader RepositoryReader) *MetricsQueryService {
+	return &MetricsQueryService{
+		reader: reader,
 	}
 }
 
@@ -34,7 +42,7 @@ var (
 	ErrUnsupportedMetricType = errors.New("unsupported metric type")
 )
 
-func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
+func (rs *MetricsReceiverService) UpdateMetricFromParams(mType, mName, mValue string) error {
 	var metric model.Metrics
 	metric.ID = mName
 	metric.MType = mType
@@ -56,23 +64,23 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 		return ErrUnsupportedMetricType
 	}
 
-	if err := ms.writer.UpdateMetrics(&metric); err != nil {
+	if err := rs.writer.UpdateMetrics(&metric); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
+func (qs *MetricsQueryService) GetMetricValue(mType, mName string) (string, error) {
 	switch mType {
 	case model.Gauge:
-		value, err := ms.reader.GetGauge(mName)
+		value, err := qs.reader.GetGauge(mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
 	case model.Counter:
-		value, err := ms.reader.GetCounter(mName)
+		value, err := qs.reader.GetCounter(mName)
 		if err != nil {
 			return "", err
 		}
@@ -82,14 +90,14 @@ func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
-func (ms *MetricsService) GetAllMetrics() map[string]string {
+func (qs *MetricsQueryService) GetAllMetrics() map[string]string {
 	list := make(map[string]string)
 
-	for name, value := range ms.reader.GetAllGauges() {
+	for name, value := range qs.reader.GetAllGauges() {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	for name, value := range ms.reader.GetAllCounters() {
+	for name, value := range qs.reader.GetAllCounters() {
 		list[name] = strconv.FormatInt(value, 10)
 	}
 	return list

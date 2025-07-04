@@ -21,19 +21,27 @@ type MetricsReader interface {
 type MetricsWriter interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
 }
-type metricsHandler struct {
+type metricsQueryHandler struct {
 	reader MetricsReader
+}
+
+type metricsReceiverHandler struct {
 	writer MetricsWriter
 }
 
-func newMetricsHandler(reader MetricsReader, writer MetricsWriter) *metricsHandler {
-	return &metricsHandler{
-		reader: reader,
+func newMetricsUpdateHandler(writer MetricsWriter) *metricsReceiverHandler {
+	return &metricsReceiverHandler{
 		writer: writer,
 	}
 }
 
-func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Request) {
+func newMetricsQueryHandler(reader MetricsReader) *metricsQueryHandler {
+	return &metricsQueryHandler{
+		reader: reader,
+	}
+}
+
+func (rh *metricsReceiverHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
@@ -43,7 +51,7 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
+	if err := rh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidMetricValue):
 			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
@@ -59,11 +67,11 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Request) {
+func (qh *metricsQueryHandler) GetMetricHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	mValue, err := h.reader.GetMetricValue(mType, mName)
+	mValue, err := qh.reader.GetMetricValue(mType, mName)
 	if err != nil {
 		if errors.Is(err, repository.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -78,8 +86,8 @@ func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Re
 	_, _ = w.Write([]byte(mValue))
 }
 
-func (h *metricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := h.reader.GetAllMetrics()
+func (qh *metricsQueryHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
+	list := qh.reader.GetAllMetrics()
 
 	keys := make([]string, 0, len(list))
 	for name := range list {

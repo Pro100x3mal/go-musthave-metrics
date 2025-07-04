@@ -7,18 +7,20 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func newRouter(mh *metricsHandler) chi.Router {
+func newRouter(rh *metricsReceiverHandler, qh *metricsQueryHandler) chi.Router {
 	r := chi.NewRouter()
-	r.Get("/", mh.ListAllMetricsHandler)
-	r.Get("/value/{mType}/{mName}", mh.GetMetricValueHandler)
-	r.Post("/update/{mType}/{mName}/{mValue}", mh.UpdateMetricsHandler)
+
+	r.Get("/", qh.ListAllMetricsHandler)
+	r.Get("/value/{mType}/{mName}", qh.GetMetricHandler)
+	r.Post("/update/{mType}/{mName}/{mValue}", rh.UpdateHandler)
 
 	return r
 }
 
-func Serve(cfg config.ServerConfig, reader MetricsReader, writer MetricsWriter) error {
-	h := newMetricsHandler(reader, writer)
-	router := newRouter(h)
+func Serve(cfg config.ServerConfig, receiverService MetricsWriter, queryService MetricsReader) error {
+	rh := newMetricsUpdateHandler(receiverService)
+	qh := newMetricsQueryHandler(queryService)
+	router := newRouter(rh, qh)
 
 	srv := &http.Server{
 		Addr:    cfg.ServerAddr,

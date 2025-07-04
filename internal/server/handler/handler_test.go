@@ -65,7 +65,7 @@ func (m *mockUpdater) GetAllMetrics() map[string]string {
 }
 
 func TestUpdateMetricsHandler(t *testing.T) {
-	h := newMetricsHandler(&mockUpdater{})
+	h := newMetricsQueryHandler(&mockUpdater{})
 	r := newRouter(h)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -106,7 +106,7 @@ func TestUpdateMetricsHandler(t *testing.T) {
 }
 
 func TestGetMetricValueHandler(t *testing.T) {
-	h := newMetricsHandler(&mockUpdater{})
+	h := newMetricsQueryHandler(&mockUpdater{})
 	r := newRouter(h)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
@@ -144,7 +144,7 @@ func TestGetMetricValueHandler(t *testing.T) {
 }
 
 func TestListAllMetricsHandler(t *testing.T) {
-	h := newMetricsHandler(&mockUpdater{})
+	h := newMetricsQueryHandler(&mockUpdater{})
 	r := newRouter(h)
 	ts := httptest.NewServer(r)
 	defer ts.Close()
