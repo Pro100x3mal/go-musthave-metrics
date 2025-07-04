@@ -7,20 +7,25 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/model"
 )
 
-type MetricsRepository interface {
-	UpdateMetrics(metric *model.Metrics) error
+type RepositoryReader interface {
 	GetGauge(mName string) (float64, error)
 	GetCounter(mName string) (int64, error)
 	GetAllGauges() map[string]float64
 	GetAllCounters() map[string]int64
 }
+
+type RepositoryWriter interface {
+	UpdateMetrics(metric *model.Metrics) error
+}
 type MetricsService struct {
-	repo MetricsRepository
+	reader RepositoryReader
+	writer RepositoryWriter
 }
 
-func NewMetricsService(repo MetricsRepository) *MetricsService {
+func NewMetricsService(reader RepositoryReader, writer RepositoryWriter) *MetricsService {
 	return &MetricsService{
-		repo: repo,
+		reader: reader,
+		writer: writer,
 	}
 }
 
@@ -51,7 +56,7 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 		return ErrUnsupportedMetricType
 	}
 
-	if err := ms.repo.UpdateMetrics(&metric); err != nil {
+	if err := ms.writer.UpdateMetrics(&metric); err != nil {
 		return err
 	}
 
@@ -61,13 +66,13 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	switch mType {
 	case model.Gauge:
-		value, err := ms.repo.GetGauge(mName)
+		value, err := ms.reader.GetGauge(mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
 	case model.Counter:
-		value, err := ms.repo.GetCounter(mName)
+		value, err := ms.reader.GetCounter(mName)
 		if err != nil {
 			return "", err
 		}
@@ -80,11 +85,11 @@ func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 func (ms *MetricsService) GetAllMetrics() map[string]string {
 	list := make(map[string]string)
 
-	for name, value := range ms.repo.GetAllGauges() {
+	for name, value := range ms.reader.GetAllGauges() {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	for name, value := range ms.repo.GetAllCounters() {
+	for name, value := range ms.reader.GetAllCounters() {
 		list[name] = strconv.FormatInt(value, 10)
 	}
 	return list

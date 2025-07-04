@@ -16,8 +16,8 @@ func newRouter(mh *metricsHandler) chi.Router {
 	return r
 }
 
-func Serve(cfg config.ServerConfig, updater MetricsUpdater) error {
-	h := newMetricsHandler(updater)
+func Serve(cfg config.ServerConfig, reader MetricsReader, writer MetricsWriter) error {
+	h := newMetricsHandler(reader, writer)
 	router := newRouter(h)
 
 	srv := &http.Server{

@@ -18,7 +18,9 @@ func main() {
 func run() error {
 	cfg := config.GetConfig()
 	repo := repository.NewMemStorage()
-	metricsService := service.NewMetricsService(repo)
+	rReader, rWriter := repo, repo
+	metricsService := service.NewMetricsService(rReader, rWriter)
+	msReader, msWriter := metricsService, metricsService
 
-	return handler.Serve(cfg, metricsService)
+	return handler.Serve(cfg, msReader, msWriter)
 }

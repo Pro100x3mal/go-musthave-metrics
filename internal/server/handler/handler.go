@@ -13,18 +13,23 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type MetricsUpdater interface {
-	UpdateMetricFromParams(mType, mName, mValue string) error
+type MetricsReader interface {
 	GetMetricValue(mType, mName string) (string, error)
 	GetAllMetrics() map[string]string
 }
+
+type MetricsWriter interface {
+	UpdateMetricFromParams(mType, mName, mValue string) error
+}
 type metricsHandler struct {
-	updater MetricsUpdater
+	reader MetricsReader
+	writer MetricsWriter
 }
 
-func newMetricsHandler(updater MetricsUpdater) *metricsHandler {
+func newMetricsHandler(reader MetricsReader, writer MetricsWriter) *metricsHandler {
 	return &metricsHandler{
-		updater: updater,
+		reader: reader,
+		writer: writer,
 	}
 }
 
@@ -38,7 +43,7 @@ func (h *metricsHandler) UpdateMetricsHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.updater.UpdateMetricFromParams(mType, mName, mValue); err != nil {
+	if err := h.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidMetricValue):
 			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
@@ -58,7 +63,7 @@ func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Re
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	mValue, err := h.updater.GetMetricValue(mType, mName)
+	mValue, err := h.reader.GetMetricValue(mType, mName)
 	if err != nil {
 		if errors.Is(err, repository.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -74,7 +79,7 @@ func (h *metricsHandler) GetMetricValueHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (h *metricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := h.updater.GetAllMetrics()
+	list := h.reader.GetAllMetrics()
 
 	keys := make([]string, 0, len(list))
 	for name := range list {
