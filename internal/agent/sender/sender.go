@@ -12,9 +12,9 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func SendMetrics(repo service.MetricsRepository, cfg config.AgentConfig) {
+func SendMetrics(queryService *service.MetricsQueryService, cfg config.AgentConfig) {
 	client := resty.New()
-	metrics := repo.GetAllMetrics()
+	metrics := queryService.GetAllMetrics()
 
 	for _, m := range metrics {
 		var valueStr string

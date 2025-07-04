@@ -19,7 +19,8 @@ func main() {
 func run() error {
 	cfg := config.GetConfig()
 	repo := repository.NewMemStorage()
-	metricsService := service.NewMetricsService(repo)
+	collectService := service.NewMetricsCollectService(repo)
+	queryService := service.NewMetricsQueryService(repo)
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
@@ -28,7 +29,7 @@ func run() error {
 
 	go func() {
 		for range tickerPoll.C {
-			err := metricsService.CollectMetrics()
+			err := collectService.CollectMetrics()
 			if err != nil {
 				log.Println("collect error:", err)
 			}
@@ -37,7 +38,7 @@ func run() error {
 
 	go func() {
 		for range tickerReport.C {
-			sender.SendMetrics(repo, cfg)
+			sender.SendMetrics(queryService, cfg)
 		}
 	}()
 

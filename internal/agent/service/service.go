@@ -7,19 +7,32 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
 )
 
-type MetricsRepository interface {
-	UpdateMetrics(metric *model.Metrics) error
+type RepositoryReader interface {
 	GetAllMetrics() []*model.Metrics
 }
 
-type MetricsService struct {
-	repo      MetricsRepository
+type RepositoryWriter interface {
+	UpdateMetrics(metric *model.Metrics) error
+}
+
+type MetricsCollectService struct {
+	writer    RepositoryWriter
 	pollCount int64
 }
 
-func NewMetricsService(repo MetricsRepository) *MetricsService {
-	return &MetricsService{
-		repo: repo,
+type MetricsQueryService struct {
+	reader RepositoryReader
+}
+
+func NewMetricsQueryService(reader RepositoryReader) *MetricsQueryService {
+	return &MetricsQueryService{
+		reader: reader,
+	}
+}
+
+func NewMetricsCollectService(writer RepositoryWriter) *MetricsCollectService {
+	return &MetricsCollectService{
+		writer: writer,
 	}
 }
 
@@ -58,13 +71,13 @@ var runtimeMetrics = []getMetrics{
 	{name: "MetricTotalAlloc", get: func(m *runtime.MemStats) float64 { return float64(m.TotalAlloc) }},
 }
 
-func (ms *MetricsService) CollectMetrics() error {
+func (cs *MetricsCollectService) CollectMetrics() error {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
 	for _, getFunc := range runtimeMetrics {
 		val := getFunc.get(&m)
-		err := ms.repo.UpdateMetrics(&model.Metrics{
+		err := cs.writer.UpdateMetrics(&model.Metrics{
 			ID:    getFunc.name,
 			MType: model.Gauge,
 			Value: &val,
@@ -74,12 +87,12 @@ func (ms *MetricsService) CollectMetrics() error {
 		}
 	}
 
-	err := ms.updateRandomValue()
+	err := cs.updateRandomValue()
 	if err != nil {
 		return err
 	}
 
-	err = ms.incrementPollCount()
+	err = cs.incrementPollCount()
 	if err != nil {
 		return err
 	}
@@ -87,9 +100,9 @@ func (ms *MetricsService) CollectMetrics() error {
 	return nil
 }
 
-func (ms *MetricsService) updateRandomValue() error {
+func (cs *MetricsCollectService) updateRandomValue() error {
 	random := rand.Float64()
-	err := ms.repo.UpdateMetrics(&model.Metrics{
+	err := cs.writer.UpdateMetrics(&model.Metrics{
 		ID:    "RandomValue",
 		MType: model.Gauge,
 		Value: &random,
@@ -100,10 +113,10 @@ func (ms *MetricsService) updateRandomValue() error {
 	return nil
 }
 
-func (ms *MetricsService) incrementPollCount() error {
-	ms.pollCount++
-	val := ms.pollCount
-	err := ms.repo.UpdateMetrics(&model.Metrics{
+func (cs *MetricsCollectService) incrementPollCount() error {
+	cs.pollCount++
+	val := cs.pollCount
+	err := cs.writer.UpdateMetrics(&model.Metrics{
 		ID:    "PollCount",
 		MType: model.Counter,
 		Delta: &val,
@@ -112,4 +125,8 @@ func (ms *MetricsService) incrementPollCount() error {
 		return err
 	}
 	return nil
+}
+
+func (qs *MetricsQueryService) GetAllMetrics() []*model.Metrics {
+	return qs.reader.GetAllMetrics()
 }
