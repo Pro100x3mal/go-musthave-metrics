@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
@@ -16,6 +19,9 @@ func main() {
 }
 
 func run() error {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	cfg := config.GetConfig()
 	repo := repository.NewMemStorage()
 	collectService := service.NewMetricsCollectService(repo)
@@ -28,24 +34,20 @@ func run() error {
 	defer tickerPoll.Stop()
 	defer tickerReport.Stop()
 
-	go func() {
-		for range tickerPoll.C {
-			err := collectService.UpdateAllMetrics()
-			if err != nil {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("shutting down gracefully...")
+			return ctx.Err()
+		case <-tickerPoll.C:
+			if err := collectService.UpdateAllMetrics(); err != nil {
 				log.Println("collect error:", err)
 			}
-		}
-	}()
-
-	go func() {
-		for range tickerReport.C {
+		case <-tickerReport.C:
 			queryService.SendMetrics(newClient)
-			err := collectService.ResetPollCount()
-			if err != nil {
+			if err := collectService.ResetPollCount(); err != nil {
 				log.Println("collect error:", err)
 			}
 		}
-	}()
-
-	select {}
+	}
 }
