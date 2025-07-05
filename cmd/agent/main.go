@@ -6,7 +6,6 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/sender"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/service"
 )
 
@@ -22,6 +21,8 @@ func run() error {
 	collectService := service.NewMetricsCollectService(repo)
 	queryService := service.NewMetricsQueryService(repo)
 
+	newClient := service.NewClient(cfg)
+
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
 	defer tickerPoll.Stop()
@@ -29,7 +30,7 @@ func run() error {
 
 	go func() {
 		for range tickerPoll.C {
-			err := collectService.CollectMetrics()
+			err := collectService.UpdateAllMetrics()
 			if err != nil {
 				log.Println("collect error:", err)
 			}
@@ -38,7 +39,11 @@ func run() error {
 
 	go func() {
 		for range tickerReport.C {
-			sender.SendMetrics(queryService, cfg)
+			queryService.SendMetrics(newClient)
+			err := collectService.ResetPollCount()
+			if err != nil {
+				log.Println("collect error:", err)
+			}
 		}
 	}()
 
