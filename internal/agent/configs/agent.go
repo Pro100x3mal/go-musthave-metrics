@@ -12,6 +12,7 @@ type AgentConfig struct {
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	ServerAddr     string
+	LogLevel       string
 }
 
 func GetConfig() *AgentConfig {
@@ -23,10 +24,15 @@ func GetConfig() *AgentConfig {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
 	flag.IntVar(&pollSec, "p", 2, "polling interval in seconds")
 	flag.IntVar(&reportSec, "r", 10, "reporting interval in seconds")
+	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 
 	if envServerAddr := os.Getenv("ADDRESS"); envServerAddr != "" {
 		cfg.ServerAddr = envServerAddr
+	}
+
+	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
+		cfg.LogLevel = envLogLevel
 	}
 
 	if envPollSecStr := os.Getenv("POLL_INTERVAL"); envPollSecStr != "" {

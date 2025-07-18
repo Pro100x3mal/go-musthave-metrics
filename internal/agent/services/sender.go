@@ -1,12 +1,13 @@
 package services
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 )
 
 type RepositoryReader interface {
@@ -35,7 +36,7 @@ func NewClient(cfg *configs.AgentConfig) *Client {
 	}
 }
 
-func (qs *MetricsQueryService) SendMetrics(c *Client) {
+func (qs *MetricsQueryService) SendMetrics(c *Client, log *infrastructure.Logger) {
 	metrics := qs.reader.GetAllMetrics()
 
 	for _, m := range metrics {
@@ -56,7 +57,11 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			continue
 		}
 
-		log.Printf("sending metric: %-10s %-20s =%s", m.MType, m.ID, valueStr)
+		log.Info("sending metric",
+			zap.String("type", m.MType),
+			zap.String("id", m.ID),
+			zap.String("value", valueStr),
+		)
 
 		_, err := c.client.R().
 			SetPathParam("type", m.MType).
@@ -65,11 +70,17 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			Post("/update/{type}/{name}/{value}")
 
 		if err != nil {
-			log.Println("post error:", err)
+			log.Error("could not post metric to server",
+				zap.String("type", m.MType),
+				zap.String("id", m.ID),
+				zap.String("value", valueStr),
+				zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
+				zap.Error(err),
+			)
 			continue
 		}
 
 	}
 
-	log.Printf("all metrics was sent succesfully")
+	log.Info("all metrics was sent succesfully")
 }
