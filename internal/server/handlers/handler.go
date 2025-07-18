@@ -8,40 +8,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 )
 
-type MetricsReader interface {
-	GetMetricValue(mType, mName string) (string, error)
-	GetAllMetrics() map[string]string
-}
-
-type MetricsWriter interface {
-	UpdateMetricFromParams(mType, mName, mValue string) error
-}
-type metricsQueryHandler struct {
-	reader MetricsReader
-}
-
-type metricsReceiverHandler struct {
-	writer MetricsWriter
-}
-
-func newMetricsUpdateHandler(writer MetricsWriter) *metricsReceiverHandler {
-	return &metricsReceiverHandler{
-		writer: writer,
-	}
-}
-
-func newMetricsQueryHandler(reader MetricsReader) *metricsQueryHandler {
-	return &metricsQueryHandler{
-		reader: reader,
-	}
-}
-
-func (rh *metricsReceiverHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) {
+func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
@@ -51,11 +22,11 @@ func (rh *metricsReceiverHandler) UpdateHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := rh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
+	if err := mh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
 		switch {
-		case errors.Is(err, services.ErrInvalidMetricValue):
+		case errors.Is(err, models.ErrInvalidMetricValue):
 			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
-		case errors.Is(err, services.ErrUnsupportedMetricType):
+		case errors.Is(err, models.ErrUnsupportedMetricType):
 			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
 		default:
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -67,13 +38,13 @@ func (rh *metricsReceiverHandler) UpdateHandler(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusOK)
 }
 
-func (qh *metricsQueryHandler) GetMetricHandler(w http.ResponseWriter, r *http.Request) {
+func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	mValue, err := qh.reader.GetMetricValue(mType, mName)
+	mValue, err := mh.reader.GetMetricValue(mType, mName)
 	if err != nil {
-		if errors.Is(err, repositories.ErrMetricNotFound) {
+		if errors.Is(err, models.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -86,8 +57,8 @@ func (qh *metricsQueryHandler) GetMetricHandler(w http.ResponseWriter, r *http.R
 	_, _ = w.Write([]byte(mValue))
 }
 
-func (qh *metricsQueryHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := qh.reader.GetAllMetrics()
+func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
+	list := mh.reader.GetAllMetrics()
 
 	keys := make([]string, 0, len(list))
 	for name := range list {

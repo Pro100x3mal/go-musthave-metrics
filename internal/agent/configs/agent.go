@@ -14,7 +14,7 @@ type AgentConfig struct {
 	ServerAddr     string
 }
 
-func GetConfig() AgentConfig {
+func GetConfig() *AgentConfig {
 	var (
 		pollSec, reportSec int
 		cfg                AgentConfig
@@ -48,5 +48,5 @@ func GetConfig() AgentConfig {
 	cfg.PollInterval = time.Duration(pollSec) * time.Second
 	cfg.ReportInterval = time.Duration(reportSec) * time.Second
 
-	return cfg
+	return &cfg
 }

@@ -1,48 +1,40 @@
 package services
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 )
 
-type RepositoryReader interface {
+type MetricsRepositoryReader interface {
 	GetGauge(mName string) (float64, error)
 	GetCounter(mName string) (int64, error)
 	GetAllGauges() map[string]float64
 	GetAllCounters() map[string]int64
 }
 
-type RepositoryWriter interface {
+type MetricsRepositoryWriter interface {
 	UpdateMetrics(metric *models.Metrics) error
 }
-type MetricsReceiverService struct {
-	writer RepositoryWriter
+
+type MetricsRepositoryInterface interface {
+	MetricsRepositoryReader
+	MetricsRepositoryWriter
 }
 
-type MetricsQueryService struct {
-	reader RepositoryReader
+type MetricsService struct {
+	reader MetricsRepositoryReader
+	writer MetricsRepositoryWriter
 }
 
-func NewMetricsReceiverService(writer RepositoryWriter) *MetricsReceiverService {
-	return &MetricsReceiverService{
-		writer: writer,
+func NewMetricsService(repository MetricsRepositoryInterface) *MetricsService {
+	return &MetricsService{
+		reader: repository,
+		writer: repository,
 	}
 }
 
-func NewMetricsQueryService(reader RepositoryReader) *MetricsQueryService {
-	return &MetricsQueryService{
-		reader: reader,
-	}
-}
-
-var (
-	ErrInvalidMetricValue    = errors.New("invalid metric value")
-	ErrUnsupportedMetricType = errors.New("unsupported metric type")
-)
-
-func (rs *MetricsReceiverService) UpdateMetricFromParams(mType, mName, mValue string) error {
+func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
 	var metric models.Metrics
 	metric.ID = mName
 	metric.MType = mType
@@ -51,53 +43,53 @@ func (rs *MetricsReceiverService) UpdateMetricFromParams(mType, mName, mValue st
 	case models.Gauge:
 		value, err := strconv.ParseFloat(mValue, 64)
 		if err != nil {
-			return ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		}
 		metric.Value = &value
 	case models.Counter:
 		delta, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
-			return ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		}
 		metric.Delta = &delta
 	default:
-		return ErrUnsupportedMetricType
+		return models.ErrUnsupportedMetricType
 	}
 
-	if err := rs.writer.UpdateMetrics(&metric); err != nil {
+	if err := ms.writer.UpdateMetrics(&metric); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (qs *MetricsQueryService) GetMetricValue(mType, mName string) (string, error) {
+func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	switch mType {
 	case models.Gauge:
-		value, err := qs.reader.GetGauge(mName)
+		value, err := ms.reader.GetGauge(mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
 	case models.Counter:
-		value, err := qs.reader.GetCounter(mName)
+		value, err := ms.reader.GetCounter(mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatInt(value, 10), nil
 	default:
-		return "", ErrUnsupportedMetricType
+		return "", models.ErrUnsupportedMetricType
 	}
 }
 
-func (qs *MetricsQueryService) GetAllMetrics() map[string]string {
+func (ms *MetricsService) GetAllMetrics() map[string]string {
 	list := make(map[string]string)
 
-	for name, value := range qs.reader.GetAllGauges() {
+	for name, value := range ms.reader.GetAllGauges() {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	for name, value := range qs.reader.GetAllCounters() {
+	for name, value := range ms.reader.GetAllCounters() {
 		list[name] = strconv.FormatInt(value, 10)
 	}
 	return list

@@ -27,7 +27,7 @@ type Client struct {
 	client *resty.Client
 }
 
-func NewClient(cfg configs.AgentConfig) *Client {
+func NewClient(cfg *configs.AgentConfig) *Client {
 	return &Client{
 		client: resty.New().
 			SetBaseURL("http://"+cfg.ServerAddr).
