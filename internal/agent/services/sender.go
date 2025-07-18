@@ -1,16 +1,17 @@
-package service
+package services
 
 import (
-	"log"
 	"strconv"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 )
 
 type RepositoryReader interface {
-	GetAllMetrics() []*model.Metrics
+	GetAllMetrics() []*models.Metrics
 }
 
 type MetricsQueryService struct {
@@ -27,7 +28,7 @@ type Client struct {
 	client *resty.Client
 }
 
-func NewClient(cfg config.AgentConfig) *Client {
+func NewClient(cfg *configs.AgentConfig) *Client {
 	return &Client{
 		client: resty.New().
 			SetBaseURL("http://"+cfg.ServerAddr).
@@ -35,19 +36,19 @@ func NewClient(cfg config.AgentConfig) *Client {
 	}
 }
 
-func (qs *MetricsQueryService) SendMetrics(c *Client) {
+func (qs *MetricsQueryService) SendMetrics(c *Client, log *infrastructure.Logger) {
 	metrics := qs.reader.GetAllMetrics()
 
 	for _, m := range metrics {
 		var valueStr string
 
 		switch m.MType {
-		case model.Gauge:
+		case models.Gauge:
 			if m.Value == nil {
 				continue
 			}
 			valueStr = strconv.FormatFloat(*m.Value, 'f', -1, 64)
-		case model.Counter:
+		case models.Counter:
 			if m.Delta == nil {
 				continue
 			}
@@ -56,7 +57,11 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			continue
 		}
 
-		log.Printf("sending metric: %-10s %-20s =%s", m.MType, m.ID, valueStr)
+		log.Info("sending metric",
+			zap.String("type", m.MType),
+			zap.String("id", m.ID),
+			zap.String("value", valueStr),
+		)
 
 		_, err := c.client.R().
 			SetPathParam("type", m.MType).
@@ -65,11 +70,17 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			Post("/update/{type}/{name}/{value}")
 
 		if err != nil {
-			log.Println("post error:", err)
+			log.Error("could not post metric to server",
+				zap.String("type", m.MType),
+				zap.String("id", m.ID),
+				zap.String("value", valueStr),
+				zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
+				zap.Error(err),
+			)
 			continue
 		}
 
 	}
 
-	log.Printf("all metrics was sent succesfully")
+	log.Info("all metrics was sent succesfully")
 }
