@@ -49,12 +49,12 @@ func run() error {
 			return ctx.Err()
 		case <-tickerPoll.C:
 			if err = collectService.UpdateAllMetrics(); err != nil {
-				log.Error("collect error", zap.Error(err))
+				log.Error("failed to update metrics", zap.Error(err))
 			}
 		case <-tickerReport.C:
 			queryService.SendMetrics(newClient, log)
 			if err = collectService.ResetPollCount(); err != nil {
-				log.Error("collect error", zap.Error(err))
+				log.Error("failed to reset poll count", zap.Error(err))
 			}
 		}
 	}
