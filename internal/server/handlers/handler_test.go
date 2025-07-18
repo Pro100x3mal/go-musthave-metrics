@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"io"
@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,31 +28,31 @@ func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error 
 		case "123", "-321":
 			return nil
 		case "123.123":
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		case "123a":
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		default:
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		}
 	case "gauge":
 		switch mValue {
 		case "123.321", "-321.123", "123":
 			return nil
 		case "123.123":
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		case "123a":
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		default:
-			return service.ErrInvalidMetricValue
+			return services.ErrInvalidMetricValue
 		}
 	default:
-		return service.ErrUnsupportedMetricType
+		return services.ErrUnsupportedMetricType
 	}
 }
 
 func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	if mName != "test" {
-		return "", repository.ErrMetricNotFound
+		return "", repositories.ErrMetricNotFound
 	}
 	switch mType {
 	case "counter":
@@ -60,7 +60,7 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	case "gauge":
 		return "3.14", nil
 	default:
-		return "", service.ErrUnsupportedMetricType
+		return "", services.ErrUnsupportedMetricType
 	}
 }
 

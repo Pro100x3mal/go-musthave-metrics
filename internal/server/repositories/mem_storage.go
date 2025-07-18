@@ -1,11 +1,11 @@
-package repository
+package repositories
 
 import (
 	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 )
 
 var ErrMetricNotFound = errors.New("metric not found")
@@ -24,16 +24,16 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
+func (m *MemStorage) UpdateMetrics(metric *models.Metrics) error {
 	switch metric.MType {
-	case model.Gauge:
+	case models.Gauge:
 		if metric.Value == nil {
 			return errors.New("nil gauge value")
 		}
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		m.gauges[metric.ID] = *metric.Value
-	case model.Counter:
+	case models.Counter:
 		if metric.Delta == nil {
 			return errors.New("nil counter delta")
 		}

@@ -1,16 +1,16 @@
-package service
+package services
 
 import (
 	"fmt"
 	"math/rand"
 	"runtime"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 )
 
 type RepositoryWriter interface {
-	UpdateMetrics(metric *model.Metrics) error
-	ResetMetricValue(metric *model.Metrics) error
+	UpdateMetrics(metric *models.Metrics) error
+	ResetMetricValue(metric *models.Metrics) error
 }
 
 type MetricsCollectService struct {
@@ -75,9 +75,9 @@ func (cs *MetricsCollectService) updateCollectMetrics() error {
 
 	for name, fn := range cs.metrics.runtimeMetrics {
 		val := fn(cs.metrics.stats)
-		err := cs.writer.UpdateMetrics(&model.Metrics{
+		err := cs.writer.UpdateMetrics(&models.Metrics{
 			ID:    name,
-			MType: model.Gauge,
+			MType: models.Gauge,
 			Value: &val,
 		})
 		if err != nil {
@@ -91,9 +91,9 @@ func (cs *MetricsCollectService) updateCollectMetrics() error {
 
 func (cs *MetricsCollectService) updateRandomValue() error {
 	random := rand.Float64()
-	err := cs.writer.UpdateMetrics(&model.Metrics{
+	err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    randomValueMetric,
-		MType: model.Gauge,
+		MType: models.Gauge,
 		Value: &random,
 	})
 	if err != nil {
@@ -104,9 +104,9 @@ func (cs *MetricsCollectService) updateRandomValue() error {
 
 func (cs *MetricsCollectService) updatePollCount() error {
 	var pollCount int64 = 1
-	err := cs.writer.UpdateMetrics(&model.Metrics{
+	err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    pollCountMetric,
-		MType: model.Counter,
+		MType: models.Counter,
 		Delta: &pollCount,
 	})
 	if err != nil {
@@ -132,9 +132,9 @@ func (cs *MetricsCollectService) UpdateAllMetrics() error {
 }
 
 func (cs *MetricsCollectService) ResetPollCount() error {
-	err := cs.writer.ResetMetricValue(&model.Metrics{
+	err := cs.writer.ResetMetricValue(&models.Metrics{
 		ID:    pollCountMetric,
-		MType: model.Counter,
+		MType: models.Counter,
 	})
 
 	if err != nil {

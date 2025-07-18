@@ -1,16 +1,16 @@
-package service
+package services
 
 import (
 	"log"
 	"strconv"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/go-resty/resty/v2"
 )
 
 type RepositoryReader interface {
-	GetAllMetrics() []*model.Metrics
+	GetAllMetrics() []*models.Metrics
 }
 
 type MetricsQueryService struct {
@@ -27,7 +27,7 @@ type Client struct {
 	client *resty.Client
 }
 
-func NewClient(cfg config.AgentConfig) *Client {
+func NewClient(cfg configs.AgentConfig) *Client {
 	return &Client{
 		client: resty.New().
 			SetBaseURL("http://"+cfg.ServerAddr).
@@ -42,12 +42,12 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 		var valueStr string
 
 		switch m.MType {
-		case model.Gauge:
+		case models.Gauge:
 			if m.Value == nil {
 				continue
 			}
 			valueStr = strconv.FormatFloat(*m.Value, 'f', -1, 64)
-		case model.Counter:
+		case models.Counter:
 			if m.Delta == nil {
 				continue
 			}

@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handler"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 )
 
 func main() {
@@ -16,11 +16,11 @@ func main() {
 }
 
 func run() error {
-	cfg := config.GetConfig()
-	repo := repository.NewMemStorage()
+	cfg := configs.GetConfig()
+	repo := repositories.NewMemStorage()
 
-	receiverService := service.NewMetricsReceiverService(repo)
-	queryService := service.NewMetricsQueryService(repo)
+	receiverService := services.NewMetricsReceiverService(repo)
+	queryService := services.NewMetricsQueryService(repo)
 
-	return handler.Serve(cfg, receiverService, queryService)
+	return handlers.Serve(cfg, receiverService, queryService)
 }

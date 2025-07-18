@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
 )
 
 func main() {
@@ -22,12 +22,12 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg := config.GetConfig()
-	repo := repository.NewMemStorage()
-	collectService := service.NewMetricsCollectService(repo)
-	queryService := service.NewMetricsQueryService(repo)
+	cfg := configs.GetConfig()
+	repo := repositories.NewMemStorage()
+	collectService := services.NewMetricsCollectService(repo)
+	queryService := services.NewMetricsQueryService(repo)
 
-	newClient := service.NewClient(cfg)
+	newClient := services.NewClient(cfg)
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)

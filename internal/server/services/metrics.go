@@ -1,10 +1,10 @@
-package service
+package services
 
 import (
 	"errors"
 	"strconv"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 )
 
 type RepositoryReader interface {
@@ -15,7 +15,7 @@ type RepositoryReader interface {
 }
 
 type RepositoryWriter interface {
-	UpdateMetrics(metric *model.Metrics) error
+	UpdateMetrics(metric *models.Metrics) error
 }
 type MetricsReceiverService struct {
 	writer RepositoryWriter
@@ -43,18 +43,18 @@ var (
 )
 
 func (rs *MetricsReceiverService) UpdateMetricFromParams(mType, mName, mValue string) error {
-	var metric model.Metrics
+	var metric models.Metrics
 	metric.ID = mName
 	metric.MType = mType
 
 	switch mType {
-	case model.Gauge:
+	case models.Gauge:
 		value, err := strconv.ParseFloat(mValue, 64)
 		if err != nil {
 			return ErrInvalidMetricValue
 		}
 		metric.Value = &value
-	case model.Counter:
+	case models.Counter:
 		delta, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
 			return ErrInvalidMetricValue
@@ -73,13 +73,13 @@ func (rs *MetricsReceiverService) UpdateMetricFromParams(mType, mName, mValue st
 
 func (qs *MetricsQueryService) GetMetricValue(mType, mName string) (string, error) {
 	switch mType {
-	case model.Gauge:
+	case models.Gauge:
 		value, err := qs.reader.GetGauge(mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
-	case model.Counter:
+	case models.Counter:
 		value, err := qs.reader.GetCounter(mName)
 		if err != nil {
 			return "", err

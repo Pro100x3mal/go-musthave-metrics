@@ -1,9 +1,9 @@
-package handler
+package handlers
 
 import (
 	"net/http"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -17,7 +17,7 @@ func newRouter(rh *metricsReceiverHandler, qh *metricsQueryHandler) chi.Router {
 	return r
 }
 
-func Serve(cfg config.ServerConfig, receiverService MetricsWriter, queryService MetricsReader) error {
+func Serve(cfg configs.ServerConfig, receiverService MetricsWriter, queryService MetricsReader) error {
 	rh := newMetricsUpdateHandler(receiverService)
 	qh := newMetricsQueryHandler(queryService)
 	router := newRouter(rh, qh)

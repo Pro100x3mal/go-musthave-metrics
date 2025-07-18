@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -53,9 +53,9 @@ func (rh *metricsReceiverHandler) UpdateHandler(w http.ResponseWriter, r *http.R
 
 	if err := rh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
 		switch {
-		case errors.Is(err, service.ErrInvalidMetricValue):
+		case errors.Is(err, services.ErrInvalidMetricValue):
 			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
-		case errors.Is(err, service.ErrUnsupportedMetricType):
+		case errors.Is(err, services.ErrUnsupportedMetricType):
 			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
 		default:
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -73,7 +73,7 @@ func (qh *metricsQueryHandler) GetMetricHandler(w http.ResponseWriter, r *http.R
 
 	mValue, err := qh.reader.GetMetricValue(mType, mName)
 	if err != nil {
-		if errors.Is(err, repository.ErrMetricNotFound) {
+		if errors.Is(err, repositories.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
