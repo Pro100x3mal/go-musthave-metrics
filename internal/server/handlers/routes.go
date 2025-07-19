@@ -12,7 +12,7 @@ func (r *router) initRoutes(log *infrastructure.Logger, mh *MetricsHandler) {
 	r.Get("/", mh.ListAllMetricsHandler)
 	r.Route("/value", func(r chi.Router) {
 		r.Post("/", mh.GetJsonMetricHandler)
-		r.Get("/value/{mType}/{mName}", mh.GetMetricHandler)
+		r.Get("/{mType}/{mName}", mh.GetMetricHandler)
 	})
 	r.Route("/update", func(r chi.Router) {
 		r.Post("/", mh.UpdateJsonHandler)
