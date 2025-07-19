@@ -31,8 +31,8 @@ type Client struct {
 func NewClient(cfg *configs.AgentConfig) *Client {
 	return &Client{
 		client: resty.New().
-			SetBaseURL("http://"+cfg.ServerAddr).
-			SetHeader("Content-Type", "text/plain"),
+			SetBaseURL("http://" + cfg.ServerAddr),
+		//SetHeader("Content-Type", "text/plain"),
 	}
 }
 
@@ -63,18 +63,23 @@ func (qs *MetricsQueryService) SendMetrics(c *Client, log *infrastructure.Logger
 			zap.String("value", valueStr),
 		)
 
+		//_, err := c.client.R().
+		//	SetPathParam("type", m.MType).
+		//	SetPathParam("name", m.ID).
+		//	SetPathParam("value", valueStr).
+		//	Post("/update/{type}/{name}/{value}")
+
 		_, err := c.client.R().
-			SetPathParam("type", m.MType).
-			SetPathParam("name", m.ID).
-			SetPathParam("value", valueStr).
-			Post("/update/{type}/{name}/{value}")
+			SetBody(m).
+			Post("/update")
 
 		if err != nil {
 			log.Error("could not post metric to server",
 				zap.String("type", m.MType),
 				zap.String("id", m.ID),
 				zap.String("value", valueStr),
-				zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
+				//zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
+				zap.String("url", "/update"),
 				zap.Error(err),
 			)
 			continue

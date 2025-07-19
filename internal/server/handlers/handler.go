@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,34 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (mh *MetricsHandler) UpdateJsonHandler(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	var metric models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if metric.ID == "" || metric.MType == "" {
+		http.Error(w, "Missing required metric fields", http.StatusBadRequest)
+		return
+	}
+
+	err = mh.writer.UpdateJsonMetricFromParams(&metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+}
+
 func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
@@ -55,6 +84,46 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(mValue))
+}
+
+func (mh *MetricsHandler) GetJsonMetricHandler(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	var metric models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if metric.ID == "" || metric.MType == "" {
+		http.Error(w, "Missing required metric fields", http.StatusBadRequest)
+		return
+	}
+
+	respMetric, err := mh.reader.GetJsonMetricValue(&metric)
+	if err != nil {
+		if errors.Is(err, models.ErrMetricNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, models.ErrUnsupportedMetricType) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(respMetric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {

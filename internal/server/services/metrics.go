@@ -63,6 +63,14 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 	return nil
 }
 
+func (ms *MetricsService) UpdateJsonMetricFromParams(metric *models.Metrics) error {
+	if metric == nil {
+		return models.ErrMetricNotFound
+	}
+
+	return ms.writer.UpdateMetrics(metric)
+}
+
 func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	switch mType {
 	case models.Gauge:
@@ -79,6 +87,31 @@ func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 		return strconv.FormatInt(value, 10), nil
 	default:
 		return "", models.ErrUnsupportedMetricType
+	}
+}
+
+func (ms *MetricsService) GetJsonMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+	if metric == nil {
+		return nil, models.ErrMetricNotFound
+	}
+
+	switch metric.MType {
+	case models.Gauge:
+		value, err := ms.reader.GetGauge(metric.ID)
+		if err != nil {
+			return nil, err
+		}
+		metric.Value = &value
+		return metric, nil
+	case models.Counter:
+		delta, err := ms.reader.GetCounter(metric.ID)
+		if err != nil {
+			return nil, err
+		}
+		metric.Delta = &delta
+		return metric, nil
+	default:
+		return nil, models.ErrUnsupportedMetricType
 	}
 }
 

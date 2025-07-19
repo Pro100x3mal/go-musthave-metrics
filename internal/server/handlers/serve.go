@@ -5,17 +5,20 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
 type MetricsServiceReader interface {
 	GetMetricValue(mType, mName string) (string, error)
+	GetJsonMetricValue(metric *models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() map[string]string
 }
 
 type MetricsServiceWriter interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
+	UpdateJsonMetricFromParams(metric *models.Metrics) error
 }
 
 type MetricsServiceInterface interface {
