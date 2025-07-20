@@ -1,11 +1,11 @@
-package repository
+package repositories
 
 import (
 	"errors"
 	"fmt"
 	"sync"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/model"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 )
 
 type MemStorage struct {
@@ -22,16 +22,16 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
+func (m *MemStorage) UpdateMetrics(metric *models.Metrics) error {
 	switch metric.MType {
-	case model.Gauge:
+	case models.Gauge:
 		if metric.Value == nil {
 			return errors.New("nil gauge value")
 		}
 		m.mu.Lock()
 		m.gauges[metric.ID] = *metric.Value
 		m.mu.Unlock()
-	case model.Counter:
+	case models.Counter:
 		if metric.Delta == nil {
 			return errors.New("nil counter delta")
 		}
@@ -45,17 +45,17 @@ func (m *MemStorage) UpdateMetrics(metric *model.Metrics) error {
 	return nil
 }
 
-func (m *MemStorage) ResetMetricValue(metric *model.Metrics) error {
+func (m *MemStorage) ResetMetricValue(metric *models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	switch metric.MType {
-	case model.Gauge:
+	case models.Gauge:
 		if _, ok := m.gauges[metric.ID]; !ok {
 			return errors.New("gauge metric not found")
 		}
 		m.gauges[metric.ID] = 0
-	case model.Counter:
+	case models.Counter:
 		if _, ok := m.counters[metric.ID]; !ok {
 			return errors.New("counter metric not found")
 		}
@@ -66,26 +66,26 @@ func (m *MemStorage) ResetMetricValue(metric *model.Metrics) error {
 	return nil
 }
 
-func (m *MemStorage) GetAllMetrics() []*model.Metrics {
+func (m *MemStorage) GetAllMetrics() []*models.Metrics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	var result []*model.Metrics
+	var result []*models.Metrics
 
 	for id, value := range m.gauges {
 		v := value
-		result = append(result, &model.Metrics{
+		result = append(result, &models.Metrics{
 			ID:    id,
-			MType: model.Gauge,
+			MType: models.Gauge,
 			Value: &v,
 		})
 	}
 
 	for id, delta := range m.counters {
 		d := delta
-		result = append(result, &model.Metrics{
+		result = append(result, &models.Metrics{
 			ID:    id,
-			MType: model.Counter,
+			MType: models.Counter,
 			Delta: &d,
 		})
 	}
