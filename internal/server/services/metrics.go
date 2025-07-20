@@ -63,7 +63,7 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 	return nil
 }
 
-func (ms *MetricsService) UpdateJsonMetricFromParams(metric *models.Metrics) error {
+func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) error {
 	if metric == nil {
 		return models.ErrMetricNotFound
 	}
@@ -90,7 +90,7 @@ func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
-func (ms *MetricsService) GetJsonMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
 	if metric == nil {
 		return nil, models.ErrMetricNotFound
 	}

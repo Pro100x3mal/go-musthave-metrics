@@ -12,13 +12,13 @@ import (
 
 type MetricsServiceReader interface {
 	GetMetricValue(mType, mName string) (string, error)
-	GetJsonMetricValue(metric *models.Metrics) (*models.Metrics, error)
+	GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error)
 	GetAllMetrics() map[string]string
 }
 
 type MetricsServiceWriter interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
-	UpdateJsonMetricFromParams(metric *models.Metrics) error
+	UpdateJSONMetricFromParams(metric *models.Metrics) error
 }
 
 type MetricsServiceInterface interface {

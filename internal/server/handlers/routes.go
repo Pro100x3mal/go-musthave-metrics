@@ -11,11 +11,11 @@ func (r *router) initRoutes(log *infrastructure.Logger, mh *MetricsHandler) {
 
 	r.Get("/", mh.ListAllMetricsHandler)
 	r.Route("/value", func(r chi.Router) {
-		r.Post("/", mh.GetJsonMetricHandler)
+		r.Post("/", mh.GetJSONMetricHandler)
 		r.Get("/{mType}/{mName}", mh.GetMetricHandler)
 	})
 	r.Route("/update", func(r chi.Router) {
-		r.Post("/", mh.UpdateJsonHandler)
+		r.Post("/", mh.UpdateJSONHandler)
 		r.Post("/{mType}/{mName}/{mValue}", mh.UpdateHandler)
 	})
 }

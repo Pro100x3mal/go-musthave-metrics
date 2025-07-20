@@ -39,7 +39,7 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func (mh *MetricsHandler) UpdateJsonHandler(w http.ResponseWriter, r *http.Request) {
+func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
 		return
@@ -57,7 +57,7 @@ func (mh *MetricsHandler) UpdateJsonHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = mh.writer.UpdateJsonMetricFromParams(&metric)
+	err = mh.writer.UpdateJSONMetricFromParams(&metric)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -86,7 +86,7 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 	_, _ = w.Write([]byte(mValue))
 }
 
-func (mh *MetricsHandler) GetJsonMetricHandler(w http.ResponseWriter, r *http.Request) {
+func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Request) {
 	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
 		return
@@ -104,7 +104,7 @@ func (mh *MetricsHandler) GetJsonMetricHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respMetric, err := mh.reader.GetJsonMetricValue(&metric)
+	respMetric, err := mh.reader.GetJSONMetricValue(&metric)
 	if err != nil {
 		if errors.Is(err, models.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
