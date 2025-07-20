@@ -14,7 +14,8 @@ type MetricsRepositoryReader interface {
 }
 
 type MetricsRepositoryWriter interface {
-	UpdateMetrics(metric *models.Metrics) error
+	UpdateGauge(metric *models.Metrics) error
+	UpdateCounter(metric *models.Metrics) error
 }
 
 type MetricsRepositoryInterface interface {
@@ -46,21 +47,17 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 			return models.ErrInvalidMetricValue
 		}
 		metric.Value = &value
+		return ms.writer.UpdateGauge(&metric)
 	case models.Counter:
 		delta, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
 			return models.ErrInvalidMetricValue
 		}
 		metric.Delta = &delta
+		return ms.writer.UpdateCounter(&metric)
 	default:
 		return models.ErrUnsupportedMetricType
 	}
-
-	if err := ms.writer.UpdateMetrics(&metric); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) error {
@@ -68,7 +65,14 @@ func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) err
 		return models.ErrMetricNotFound
 	}
 
-	return ms.writer.UpdateMetrics(metric)
+	switch metric.MType {
+	case models.Gauge:
+		return ms.writer.UpdateGauge(metric)
+	case models.Counter:
+		return ms.writer.UpdateCounter(metric)
+	default:
+		return models.ErrUnsupportedMetricType
+	}
 }
 
 func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {

@@ -28,12 +28,10 @@ func initRouterForTests() http.Handler {
 }
 
 func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
-	// Пример: вернуть заглушку или nil
 	return metric, nil
 }
 
 func (m *mockUpdater) UpdateJSONMetricFromParams(metric *models.Metrics) error {
-	// Пример: имитировать успешное обновление
 	return nil
 }
 
