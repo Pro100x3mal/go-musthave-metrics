@@ -1,6 +1,9 @@
 package services
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
@@ -69,8 +72,20 @@ func (qs *MetricsQueryService) SendMetrics(c *Client, log *infrastructure.Logger
 		//	SetPathParam("value", valueStr).
 		//	Post("/update/{type}/{name}/{value}")
 
-		_, err := c.client.R().
-			SetBody(m).
+		buf := &bytes.Buffer{}
+		gz := gzip.NewWriter(buf)
+		err := json.NewEncoder(gz).Encode(m)
+		if err != nil {
+			log.Error("gzip encoding failed", zap.Error(err))
+			continue
+		}
+		gz.Close()
+
+		_, err = c.client.R().
+			SetHeader("Content-Encoding", "gzip").
+			SetHeader("Content-Type", "application/json").
+			//SetHeader("Accept-Encoding", "gzip").
+			SetBody(buf.Bytes()).
 			Post("/update")
 
 		if err != nil {

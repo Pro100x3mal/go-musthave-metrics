@@ -8,6 +8,7 @@ import (
 
 func (r *router) initRoutes(log *infrastructure.Logger, mh *MetricsHandler) {
 	r.Use(middlewares.WithLogging(log))
+	r.Use(middlewares.WithCompress)
 
 	r.Get("/", mh.ListAllMetricsHandler)
 	r.Route("/value", func(r chi.Router) {
