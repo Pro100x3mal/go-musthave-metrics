@@ -27,7 +27,6 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 type compressWriter struct {
 	w   http.ResponseWriter
 	gzw *gzip.Writer
-	//wroteHeader bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
@@ -42,17 +41,10 @@ func (cw *compressWriter) Header() http.Header {
 }
 
 func (cw *compressWriter) Write(p []byte) (int, error) {
-	//if !cw.wroteHeader {
-	//	cw.WriteHeader(http.StatusOK)
-	//}
 	return cw.gzw.Write(p)
 }
 
 func (cw *compressWriter) WriteHeader(statusCode int) {
-	//if cw.wroteHeader {
-	//	return
-	//}
-	//cw.wroteHeader = true
 	if statusCode < 300 {
 		cw.w.Header().Set("Content-Encoding", "gzip")
 	}
