@@ -1,26 +1,39 @@
 package main
 
 import (
-	"log"
+	"os"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handler"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 )
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		os.Exit(1)
 	}
 }
 
 func run() error {
-	cfg := config.GetConfig()
-	repo := repository.NewMemStorage()
+	cfg := configs.GetConfig()
 
-	receiverService := service.NewMetricsReceiverService(repo)
-	queryService := service.NewMetricsQueryService(repo)
+	log, err := infrastructure.NewLogger(cfg)
+	if err != nil {
+		return err
+	}
+	defer log.Sync()
 
-	return handler.Serve(cfg, receiverService, queryService)
+	repo := repositories.NewMemStorage()
+	metricsService := services.NewMetricsService(repo)
+	metricsHandler := handlers.NewMetricsHandler(metricsService)
+
+	log.Info("starting application")
+
+	if err = handlers.StartServer(cfg, log, metricsHandler); err != nil {
+		return err
+	}
+
+	return nil
 }

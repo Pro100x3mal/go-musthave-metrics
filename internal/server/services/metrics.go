@@ -1,0 +1,133 @@
+package services
+
+import (
+	"strconv"
+
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+)
+
+type MetricsRepositoryReader interface {
+	GetGauge(mName string) (float64, error)
+	GetCounter(mName string) (int64, error)
+	GetAllGauges() map[string]float64
+	GetAllCounters() map[string]int64
+}
+
+type MetricsRepositoryWriter interface {
+	UpdateGauge(metric *models.Metrics) error
+	UpdateCounter(metric *models.Metrics) error
+}
+
+type MetricsRepositoryInterface interface {
+	MetricsRepositoryReader
+	MetricsRepositoryWriter
+}
+
+type MetricsService struct {
+	reader MetricsRepositoryReader
+	writer MetricsRepositoryWriter
+}
+
+func NewMetricsService(repository MetricsRepositoryInterface) *MetricsService {
+	return &MetricsService{
+		reader: repository,
+		writer: repository,
+	}
+}
+
+func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
+	var metric models.Metrics
+	metric.ID = mName
+	metric.MType = mType
+
+	switch mType {
+	case models.Gauge:
+		value, err := strconv.ParseFloat(mValue, 64)
+		if err != nil {
+			return models.ErrInvalidMetricValue
+		}
+		metric.Value = &value
+		return ms.writer.UpdateGauge(&metric)
+	case models.Counter:
+		delta, err := strconv.ParseInt(mValue, 10, 64)
+		if err != nil {
+			return models.ErrInvalidMetricValue
+		}
+		metric.Delta = &delta
+		return ms.writer.UpdateCounter(&metric)
+	default:
+		return models.ErrUnsupportedMetricType
+	}
+}
+
+func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) error {
+	if metric == nil {
+		return models.ErrMetricNotFound
+	}
+
+	switch metric.MType {
+	case models.Gauge:
+		return ms.writer.UpdateGauge(metric)
+	case models.Counter:
+		return ms.writer.UpdateCounter(metric)
+	default:
+		return models.ErrUnsupportedMetricType
+	}
+}
+
+func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
+	switch mType {
+	case models.Gauge:
+		value, err := ms.reader.GetGauge(mName)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatFloat(value, 'f', -1, 64), nil
+	case models.Counter:
+		value, err := ms.reader.GetCounter(mName)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(value, 10), nil
+	default:
+		return "", models.ErrUnsupportedMetricType
+	}
+}
+
+func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+	if metric == nil {
+		return nil, models.ErrMetricNotFound
+	}
+
+	switch metric.MType {
+	case models.Gauge:
+		value, err := ms.reader.GetGauge(metric.ID)
+		if err != nil {
+			return nil, err
+		}
+		metric.Value = &value
+		return metric, nil
+	case models.Counter:
+		delta, err := ms.reader.GetCounter(metric.ID)
+		if err != nil {
+			return nil, err
+		}
+		metric.Delta = &delta
+		return metric, nil
+	default:
+		return nil, models.ErrUnsupportedMetricType
+	}
+}
+
+func (ms *MetricsService) GetAllMetrics() map[string]string {
+	list := make(map[string]string)
+
+	for name, value := range ms.reader.GetAllGauges() {
+		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
+	}
+
+	for name, value := range ms.reader.GetAllCounters() {
+		list[name] = strconv.FormatInt(value, 10)
+	}
+	return list
+}
