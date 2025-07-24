@@ -38,7 +38,7 @@ func run() error {
 		log.Error("failed to initialize file storage", zap.Error(err))
 		return err
 	}
-	defer fs.Close()
+	log.Info("file storage initialized")
 
 	if cfg.IsRestore {
 		log.Info("restoring metrics from file")
@@ -46,6 +46,7 @@ func run() error {
 			log.Error("failed to restore metrics", zap.Error(err))
 			return err
 		}
+		log.Info("metrics restored successfully")
 	}
 
 	if cfg.StoreInterval > 0 {

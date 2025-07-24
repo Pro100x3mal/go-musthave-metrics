@@ -24,7 +24,7 @@ func GetConfig() *ServerConfig {
 
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
-	flag.IntVar(&storeInterval, "i", 3, "store interval in seconds")
+	flag.IntVar(&storeInterval, "i", 300, "store interval in seconds")
 	flag.StringVar(&cfg.FileStorePath, "f", "file_storage.json", "path to metrics storage file")
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
 

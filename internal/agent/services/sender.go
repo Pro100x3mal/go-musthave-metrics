@@ -89,14 +89,14 @@ func (qs *MetricsQueryService) SendMetrics(c *Client, log *infrastructure.Logger
 			Post("/update")
 
 		if err != nil {
-			log.Error("could not post metric to server",
-				zap.String("type", m.MType),
-				zap.String("id", m.ID),
-				zap.String("value", valueStr),
-				//zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
-				zap.String("url", "/update"),
-				zap.Error(err),
-			)
+			//log.Error("could not post metric to server",
+			//	zap.String("type", m.MType),
+			//	zap.String("id", m.ID),
+			//	zap.String("value", valueStr),
+			//	//zap.String("url", "/update/"+m.MType+"/"+m.ID+"/"+valueStr),
+			//	zap.String("url", "/update"),
+			//	zap.Error(err),
+			//)
 			continue
 		}
 
