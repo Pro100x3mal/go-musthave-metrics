@@ -62,6 +62,8 @@ func run() error {
 		log.Fatal("server failed", zap.Error(err))
 	}
 
+	defer fs.Close()
+
 	log.Info("application stopped gracefully")
 	return nil
 }
