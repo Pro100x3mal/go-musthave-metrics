@@ -9,11 +9,11 @@ import (
 )
 
 type ServerConfig struct {
-	ServerAddr    string
-	LogLevel      string
-	StoreInterval time.Duration
-	FileStorePath string
-	IsRestore     bool
+	ServerAddr      string
+	LogLevel        string
+	StoreInterval   time.Duration
+	FileStoragePath string
+	IsRestore       bool
 }
 
 func GetConfig() *ServerConfig {
@@ -25,7 +25,7 @@ func GetConfig() *ServerConfig {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.IntVar(&storeInterval, "i", 300, "store interval in seconds")
-	flag.StringVar(&cfg.FileStorePath, "f", "file_storage.json", "path to metrics storage file")
+	flag.StringVar(&cfg.FileStoragePath, "f", "file_storage.json", "path to metrics storage file")
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
 
 	flag.Parse()
@@ -47,8 +47,8 @@ func GetConfig() *ServerConfig {
 	}
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second
 
-	if envFileStorePath := os.Getenv("FILE_STORE_PATH"); envFileStorePath != "" {
-		cfg.FileStorePath = envFileStorePath
+	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
+		cfg.FileStoragePath = envFileStoragePath
 	}
 
 	if envIsRestore := os.Getenv("RESTORE"); envIsRestore != "" {

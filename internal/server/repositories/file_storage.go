@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
@@ -12,22 +13,22 @@ import (
 
 type FileStorage struct {
 	*MemStorage
-	file *os.File
-	//writer *bufio.Writer
-	//reader *bufio.Reader
+	file      *os.File
+	cfg       *configs.ServerConfig
+	fileMutex *sync.Mutex
 }
 
 func NewFileStorage(cfg *configs.ServerConfig, ms *MemStorage) (*FileStorage, error) {
-	file, err := os.OpenFile(cfg.FileStorePath, os.O_RDWR|os.O_CREATE, 0644)
+	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		return nil, fmt.Errorf("error opening storage file %s: %w", cfg.FileStorePath, err)
+		return nil, fmt.Errorf("error opening storage file %s: %w", cfg.FileStoragePath, err)
 	}
 
 	return &FileStorage{
 		MemStorage: ms,
 		file:       file,
-		//writer:     bufio.NewWriter(file),
-		//reader:     bufio.NewReader(file),
+		cfg:        cfg,
+		fileMutex:  &sync.Mutex{},
 	}, nil
 }
 
@@ -36,8 +37,8 @@ func (fs *FileStorage) Close() error {
 }
 
 func (fs *FileStorage) SaveToFile() error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
+	fs.fileMutex.Lock()
+	defer fs.fileMutex.Unlock()
 
 	var list []*models.Metrics
 
@@ -73,25 +74,15 @@ func (fs *FileStorage) SaveToFile() error {
 		return fmt.Errorf("failed to seek to beginning of file %q: %w", fs.file.Name(), err)
 	}
 
-	//fs.writer.Reset(fs.file)
-
 	_, err = fs.file.Write(data)
 	if err != nil {
 		return fmt.Errorf("failed to write metrics to file %q: %w", fs.file.Name(), err)
 	}
 
-	//err = fs.writer.Flush()
-	//if err != nil {
-	//	return fmt.Errorf("failed to flush buffer to file %q: %w", fs.file.Name(), err)
-	//}
-
 	return nil
 }
 
 func (fs *FileStorage) Restore() error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-
 	if _, err := fs.file.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("failed to seek to beginning of file %q: %w", fs.file.Name(), err)
 	}
@@ -127,6 +118,24 @@ func (fs *FileStorage) Restore() error {
 	return nil
 }
 
-func (fs *FileStorage) Sync() error {
+func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateGauge(metric); err != nil {
+		return err
+	}
+
+	if fs.cfg.StoreInterval == 0 {
+		return fs.SaveToFile()
+	}
+	return nil
+}
+
+func (fs *FileStorage) UpdateCounter(metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateCounter(metric); err != nil {
+		return err
+	}
+
+	if fs.cfg.StoreInterval == 0 {
+		return fs.SaveToFile()
+	}
 	return nil
 }

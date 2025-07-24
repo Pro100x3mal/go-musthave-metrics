@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,8 +50,13 @@ func run() error {
 		log.Info("metrics restored successfully")
 	}
 
+	var wg sync.WaitGroup
 	if cfg.StoreInterval > 0 {
-		go runAutoSave(ctx, log, fs, cfg.StoreInterval)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runAutoSave(ctx, log, fs, cfg.StoreInterval)
+		}()
 	}
 
 	metricsService := services.NewMetricsService(fs)
@@ -59,28 +65,35 @@ func run() error {
 	log.Info("starting application")
 
 	if err = handlers.StartServer(ctx, cfg, log, metricsHandler); err != nil {
-		log.Fatal("server failed", zap.Error(err))
+		log.Error("server failed", zap.Error(err))
 	}
+	log.Info("server shutdown complete")
 
-	defer fs.Close()
+	wg.Wait()
 
 	log.Info("application stopped gracefully")
-	return nil
+	return err
 }
 
 func runAutoSave(ctx context.Context, log *infrastructure.Logger, fs *repositories.FileStorage, interval time.Duration) {
+	log.Info("starting auto save loop")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
+			log.Info("running auto save loop")
 			if err := fs.SaveToFile(); err != nil {
 				log.Error("failed to save metrics to file", zap.Error(err))
 			}
 		case <-ctx.Done():
+			log.Info("stopping auto save loop")
 			if err := fs.SaveToFile(); err != nil {
 				log.Error("failed to save metrics to file on shutdown", zap.Error(err))
+			}
+			if err := fs.Close(); err != nil {
+				log.Error("failed to close file storage", zap.Error(err))
 			}
 			return
 		}

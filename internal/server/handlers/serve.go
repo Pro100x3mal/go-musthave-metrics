@@ -80,6 +80,7 @@ func StartServer(ctx context.Context, cfg *configs.ServerConfig, log *infrastruc
 			serverErrCh <- nil
 			return
 		}
+
 		log.Error("unexpected server error", zap.Error(err))
 		serverErrCh <- err
 	}()
@@ -87,6 +88,7 @@ func StartServer(ctx context.Context, cfg *configs.ServerConfig, log *infrastruc
 	select {
 	case <-ctx.Done():
 		log.Info("server is shutting down...")
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
@@ -96,7 +98,7 @@ func StartServer(ctx context.Context, cfg *configs.ServerConfig, log *infrastruc
 		}
 
 		log.Info("server shutdown complete")
-		return <-serverErrCh
+		return nil
 	case err := <-serverErrCh:
 		return err
 	}
