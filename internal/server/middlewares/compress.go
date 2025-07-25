@@ -24,9 +24,22 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	}, nil
 }
 
+func (cr *compressReader) Read(p []byte) (n int, err error) {
+	return cr.gzr.Read(p)
+}
+
+func (cr *compressReader) Close() error {
+	if err := cr.r.Close(); err != nil {
+		return err
+	}
+	return cr.gzr.Close()
+}
+
 type compressWriter struct {
-	w   http.ResponseWriter
-	gzw *gzip.Writer
+	w                 http.ResponseWriter
+	gzw               *gzip.Writer
+	shouldCompress    bool
+	writeHeaderCalled bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
@@ -41,29 +54,37 @@ func (cw *compressWriter) Header() http.Header {
 }
 
 func (cw *compressWriter) Write(p []byte) (int, error) {
-	return cw.gzw.Write(p)
+	if !cw.writeHeaderCalled {
+		cw.WriteHeader(http.StatusOK)
+	}
+
+	if cw.shouldCompress {
+		return cw.gzw.Write(p)
+	}
+
+	return cw.w.Write(p)
 }
 
 func (cw *compressWriter) WriteHeader(statusCode int) {
-	if statusCode < 300 {
+	if cw.writeHeaderCalled {
+		return
+	}
+
+	cw.writeHeaderCalled = true
+
+	isJSON := strings.Contains(cw.w.Header().Get("Content-Type"), "application/json")
+	isHTML := strings.Contains(cw.w.Header().Get("Content-Type"), "text/html")
+
+	if statusCode < 300 && (isJSON || isHTML) {
+		cw.shouldCompress = true
 		cw.w.Header().Set("Content-Encoding", "gzip")
 	}
+
 	cw.w.WriteHeader(statusCode)
 }
 
 func (cw *compressWriter) Close() error {
 	return cw.gzw.Close()
-}
-
-func (cr *compressReader) Read(p []byte) (n int, err error) {
-	return cr.gzr.Read(p)
-}
-
-func (cr *compressReader) Close() error {
-	if err := cr.r.Close(); err != nil {
-		return err
-	}
-	return cr.gzr.Close()
 }
 
 func WithCompress(next http.Handler) http.Handler {

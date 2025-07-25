@@ -119,7 +119,6 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(respMetric)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
