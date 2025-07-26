@@ -84,7 +84,10 @@ func (cw *compressWriter) WriteHeader(statusCode int) {
 }
 
 func (cw *compressWriter) Close() error {
-	return cw.gzw.Close()
+	if cw.shouldCompress {
+		return cw.gzw.Close()
+	}
+	return nil
 }
 
 func WithCompress(next http.Handler) http.Handler {
