@@ -6,11 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type mockUpdater struct{}
@@ -19,11 +18,8 @@ func initRouterForTests() http.Handler {
 	mock := &mockUpdater{}
 	handler := NewMetricsHandler(mock)
 
-	zl := zap.NewNop()
-	log := &infrastructure.Logger{Logger: zl}
-
-	r := newRouter()
-	r.initRoutes(log, handler)
+	r := chi.NewRouter()
+	initRoutes(r, handler)
 	return r
 }
 

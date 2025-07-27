@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -10,15 +9,18 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"go.uber.org/zap"
 )
 
 func main() {
+	mainLogger := zap.NewExample()
+	defer mainLogger.Sync()
+
 	if err := run(); err != nil {
-		os.Exit(1)
+		mainLogger.Fatal("application failed:", zap.Error(err))
 	}
 }
 
@@ -26,28 +28,31 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg := configs.GetConfig()
-	log, err := infrastructure.NewLogger(cfg)
+	cfg, err := configs.GetConfig()
 	if err != nil {
 		return err
 	}
-	defer log.Sync()
+
+	if err = logger.Initialize(cfg); err != nil {
+		return err
+	}
+	defer logger.Log.Sync()
 
 	repo := repositories.NewMemStorage()
 	fs, err := repositories.NewFileStorage(cfg, repo)
 	if err != nil {
-		log.Error("failed to initialize file storage", zap.Error(err))
+		logger.Log.Error("failed to initialize file storage", zap.Error(err))
 		return err
 	}
-	log.Info("file storage initialized")
+	logger.Log.Info("file storage initialized")
 
 	if cfg.IsRestore {
-		log.Info("restoring metrics from file")
+		logger.Log.Info("restoring metrics from file")
 		if err = fs.Restore(); err != nil {
-			log.Error("failed to restore metrics", zap.Error(err))
+			logger.Log.Error("failed to restore metrics", zap.Error(err))
 			return err
 		}
-		log.Info("metrics restored successfully")
+		logger.Log.Info("metrics restored successfully")
 	}
 
 	var wg sync.WaitGroup
@@ -55,45 +60,45 @@ func run() error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runAutoSave(ctx, log, fs, cfg.StoreInterval)
+			runAutoSave(ctx, fs, cfg.StoreInterval)
 		}()
 	}
 
 	metricsService := services.NewMetricsService(fs)
 	metricsHandler := handlers.NewMetricsHandler(metricsService)
 
-	log.Info("starting application")
+	logger.Log.Info("starting application")
 
-	if err = handlers.StartServer(ctx, cfg, log, metricsHandler); err != nil {
-		log.Error("server failed", zap.Error(err))
+	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
+		logger.Log.Error("server failed", zap.Error(err))
 	}
-	log.Info("server shutdown complete")
+	logger.Log.Info("server shutdown complete")
 
 	wg.Wait()
 
-	log.Info("application stopped gracefully")
+	logger.Log.Info("application stopped gracefully")
 	return err
 }
 
-func runAutoSave(ctx context.Context, log *infrastructure.Logger, fs *repositories.FileStorage, interval time.Duration) {
-	log.Info("starting auto save loop")
+func runAutoSave(ctx context.Context, fs *repositories.FileStorage, interval time.Duration) {
+	logger.Log.Info("starting auto save loop")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			log.Info("running auto save loop")
+			logger.Log.Info("running auto save loop")
 			if err := fs.SaveToFile(); err != nil {
-				log.Error("failed to save metrics to file", zap.Error(err))
+				logger.Log.Error("failed to save metrics to file", zap.Error(err))
 			}
 		case <-ctx.Done():
-			log.Info("stopping auto save loop")
+			logger.Log.Info("stopping auto save loop")
 			if err := fs.SaveToFile(); err != nil {
-				log.Error("failed to save metrics to file on shutdown", zap.Error(err))
+				logger.Log.Error("failed to save metrics to file on shutdown", zap.Error(err))
 			}
 			if err := fs.Close(); err != nil {
-				log.Error("failed to close file storage", zap.Error(err))
+				logger.Log.Error("failed to close file storage", zap.Error(err))
 			}
 			return
 		}

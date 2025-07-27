@@ -5,6 +5,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
+	"go.uber.org/zap"
 )
 
 type compressReader struct {
@@ -95,10 +98,15 @@ func WithCompress(next http.Handler) http.Handler {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			cr, err := newCompressReader(r.Body)
 			if err != nil {
+				logger.Log.Error("compression error", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			defer cr.Close()
+			defer func() {
+				if err = cr.Close(); err != nil {
+					logger.Log.Error("failed to close gzip reader", zap.Error(err))
+				}
+			}()
 			r.Body = cr
 		}
 
@@ -107,7 +115,11 @@ func WithCompress(next http.Handler) http.Handler {
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			cw := newCompressWriter(w)
 			wOut = cw
-			defer cw.Close()
+			defer func() {
+				if err := cw.Close(); err != nil {
+					logger.Log.Error("failed to close gzip writer", zap.Error(err))
+				}
+			}()
 		}
 
 		next.ServeHTTP(wOut, r)

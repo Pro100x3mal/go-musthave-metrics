@@ -2,7 +2,7 @@ package configs
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -16,7 +16,7 @@ type ServerConfig struct {
 	IsRestore       bool
 }
 
-func GetConfig() *ServerConfig {
+func GetConfig() (*ServerConfig, error) {
 	var (
 		storeInterval int
 		cfg           ServerConfig
@@ -30,34 +30,44 @@ func GetConfig() *ServerConfig {
 
 	flag.Parse()
 
-	if envServerAddr := os.Getenv("ADDRESS"); envServerAddr != "" {
-		cfg.ServerAddr = envServerAddr
+	if envServerAddr, exist := os.LookupEnv("ADDRESS"); exist {
+		if envServerAddr != "" {
+			cfg.ServerAddr = envServerAddr
+		}
 	}
 
-	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
-		cfg.LogLevel = envLogLevel
+	if envLogLevel, exist := os.LookupEnv("LOG_LEVEL"); exist {
+		if envLogLevel != "" {
+			cfg.LogLevel = envLogLevel
+		}
 	}
 
-	if envStoreInterval := os.Getenv("STORE_INTERVAL"); envStoreInterval != "" {
-		var err error
-		storeInterval, err = strconv.Atoi(envStoreInterval)
-		if err != nil {
-			log.Fatalf("invalid STORE_INTERVAL flag: %v", err)
+	if envStoreInterval, exist := os.LookupEnv("STORE_INTERVAL"); exist {
+		if envStoreInterval != "" {
+			var err error
+			storeInterval, err = strconv.Atoi(envStoreInterval)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse STORE_INTERVAL value '%s' to integer: %w", envStoreInterval, err)
+			}
 		}
 	}
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second
 
-	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
-		cfg.FileStoragePath = envFileStoragePath
-	}
-
-	if envIsRestore := os.Getenv("RESTORE"); envIsRestore != "" {
-		var err error
-		cfg.IsRestore, err = strconv.ParseBool(envIsRestore)
-		if err != nil {
-			log.Fatalf("invalid RESTORE flag: %v", err)
+	if envFileStoragePath, exist := os.LookupEnv("FILE_STORAGE_PATH"); exist {
+		if envFileStoragePath != "" {
+			cfg.FileStoragePath = envFileStoragePath
 		}
 	}
 
-	return &cfg
+	if envIsRestore, exist := os.LookupEnv("RESTORE"); exist {
+		if envIsRestore != "" {
+			var err error
+			cfg.IsRestore, err = strconv.ParseBool(envIsRestore)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse RESTORE value '%s' to boolean: %w", envIsRestore, err)
+			}
+		}
+	}
+
+	return &cfg, nil
 }

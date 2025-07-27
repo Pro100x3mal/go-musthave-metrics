@@ -2,7 +2,7 @@ package configs
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -15,7 +15,7 @@ type AgentConfig struct {
 	LogLevel       string
 }
 
-func GetConfig() *AgentConfig {
+func GetConfig() (*AgentConfig, error) {
 	var (
 		pollSec, reportSec int
 		cfg                AgentConfig
@@ -27,32 +27,40 @@ func GetConfig() *AgentConfig {
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 
-	if envServerAddr := os.Getenv("ADDRESS"); envServerAddr != "" {
-		cfg.ServerAddr = envServerAddr
-	}
-
-	if envLogLevel := os.Getenv("LOG_LEVEL"); envLogLevel != "" {
-		cfg.LogLevel = envLogLevel
-	}
-
-	if envPollSecStr := os.Getenv("POLL_INTERVAL"); envPollSecStr != "" {
-		envPollSecInt, err := strconv.Atoi(envPollSecStr)
-		if err != nil {
-			log.Fatalf("invalid POLL_INTERVAL: %v", err)
+	if envServerAddr, exists := os.LookupEnv("ADDRESS"); exists {
+		if envServerAddr != "" {
+			cfg.ServerAddr = envServerAddr
 		}
-		pollSec = envPollSecInt
 	}
 
-	if envReportSecStr := os.Getenv("REPORT_INTERVAL"); envReportSecStr != "" {
-		envReportSecInt, err := strconv.Atoi(envReportSecStr)
-		if err != nil {
-			log.Fatalf("invalid REPORT_INTERVAL: %v", err)
+	if envLogLevel, exist := os.LookupEnv("LOG_LEVEL"); exist {
+		if envLogLevel != "" {
+			cfg.LogLevel = envLogLevel
 		}
-		reportSec = envReportSecInt
+	}
+
+	if envPollSecStr, exist := os.LookupEnv("POLL_INTERVAL"); exist {
+		if envPollSecStr != "" {
+			envPollSecInt, err := strconv.Atoi(envPollSecStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse POLL_INTERVAL value '%s' to integer: %w", envPollSecStr, err)
+			}
+			pollSec = envPollSecInt
+		}
+	}
+
+	if envReportSecStr, exist := os.LookupEnv("REPORT_INTERVAL"); exist {
+		if envReportSecStr != "" {
+			envReportSecInt, err := strconv.Atoi(envReportSecStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse REPORT_INTERVAL value '%s' to integer: %w", envReportSecStr, err)
+			}
+			reportSec = envReportSecInt
+		}
 	}
 
 	cfg.PollInterval = time.Duration(pollSec) * time.Second
 	cfg.ReportInterval = time.Duration(reportSec) * time.Second
 
-	return &cfg
+	return &cfg, nil
 }

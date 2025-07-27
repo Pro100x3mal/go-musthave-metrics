@@ -2,21 +2,23 @@ package main
 
 import (
 	"context"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
 	"go.uber.org/zap"
 )
 
 func main() {
+	mainLogger := zap.NewExample()
+	defer mainLogger.Sync()
+
 	if err := run(); err != nil {
-		os.Exit(1)
+		mainLogger.Fatal("application failed:", zap.Error(err))
 	}
 }
 
@@ -24,12 +26,15 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg := configs.GetConfig()
-	log, err := infrastructure.NewLogger(cfg)
+	cfg, err := configs.GetConfig()
 	if err != nil {
 		return err
 	}
-	defer log.Sync()
+
+	if err = logger.Initialize(cfg); err != nil {
+		return err
+	}
+	defer logger.Log.Sync()
 
 	repo := repositories.NewMemStorage()
 	collectService := services.NewMetricsCollectService(repo)
@@ -45,16 +50,16 @@ func run() error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("shutting down gracefully...")
+			logger.Log.Info("shutting down gracefully...")
 			return ctx.Err()
 		case <-tickerPoll.C:
 			if err = collectService.UpdateAllMetrics(); err != nil {
-				log.Error("failed to update metrics", zap.Error(err))
+				logger.Log.Error("failed to update metrics", zap.Error(err))
 			}
 		case <-tickerReport.C:
-			queryService.SendMetrics(newClient, log)
+			queryService.SendMetrics(newClient)
 			if err = collectService.ResetPollCount(); err != nil {
-				log.Error("failed to reset poll count", zap.Error(err))
+				logger.Log.Error("failed to reset poll count", zap.Error(err))
 			}
 		}
 	}

@@ -9,8 +9,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +32,8 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 		case errors.Is(err, models.ErrUnsupportedMetricType):
 			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
 		default:
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			logger.Log.Error("failed to update metric", zap.Error(err))
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -83,7 +86,12 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(mValue))
+	_, err = w.Write([]byte(mValue))
+	if err != nil {
+		logger.Log.Error("failed to write response", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +129,8 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(respMetric)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		logger.Log.Error("failed to encode response", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 }
@@ -145,5 +154,10 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.WriteString(w, builder.String())
+	_, err := io.WriteString(w, builder.String())
+	if err != nil {
+		logger.Log.Error("failed to write response", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 }
