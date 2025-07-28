@@ -49,6 +49,9 @@ func GetConfig() (*ServerConfig, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse STORE_INTERVAL value '%s' to integer: %w", envStoreInterval, err)
 			}
+			if storeInterval < 0 {
+				return nil, fmt.Errorf("STORE_INTERVAL value '%s' must be greater than 0", envStoreInterval)
+			}
 		}
 	}
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second

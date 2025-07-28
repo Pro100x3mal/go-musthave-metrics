@@ -1,14 +1,18 @@
 package repositories
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+	"go.uber.org/zap"
 )
 
 type FileStorage struct {
@@ -16,27 +20,110 @@ type FileStorage struct {
 	file      *os.File
 	cfg       *configs.ServerConfig
 	fileMutex *sync.Mutex
+	isSync    bool
 }
 
-func NewFileStorage(cfg *configs.ServerConfig, ms *MemStorage) (*FileStorage, error) {
+func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup) (*FileStorage, error) {
+	logger.Log.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
 	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		return nil, fmt.Errorf("error opening storage file %s: %w", cfg.FileStoragePath, err)
+		logger.Log.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
+		return nil, err
 	}
 
-	return &FileStorage{
+	fs := &FileStorage{
 		MemStorage: ms,
 		file:       file,
 		cfg:        cfg,
 		fileMutex:  &sync.Mutex{},
-	}, nil
+	}
+
+	if cfg.IsRestore {
+		logger.Log.Info("restoring metrics from file", zap.String("path", cfg.FileStoragePath))
+		if err = fs.restore(); err != nil {
+			logger.Log.Error("failed to restore metrics from file", zap.Error(err))
+			return nil, err
+		}
+		logger.Log.Info("metrics restored successfully")
+	}
+
+	if cfg.StoreInterval == 0 {
+		fs.isSync = true
+	}
+
+	if cfg.StoreInterval > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runSaveByInterval(ctx, fs, cfg.StoreInterval)
+		}()
+	}
+
+	return fs, nil
 }
 
-func (fs *FileStorage) Close() error {
-	return fs.file.Close()
+func runSaveByInterval(ctx context.Context, fs *FileStorage, interval time.Duration) {
+	logger.Log.Info("starting auto save loop")
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			logger.Log.Info("running auto save loop")
+			if err := fs.save(); err != nil {
+				logger.Log.Error("failed to save metrics to file", zap.Error(err))
+			}
+		case <-ctx.Done():
+			logger.Log.Info("stopping auto save loop")
+			if err := fs.save(); err != nil {
+				logger.Log.Error("failed to save metrics to file on shutdown", zap.Error(err))
+			}
+			if err := fs.close(); err != nil {
+				logger.Log.Error("failed to close file storage", zap.Error(err))
+			}
+			return
+		}
+	}
 }
 
-func (fs *FileStorage) SaveToFile() error {
+func (fs *FileStorage) restore() error {
+	if _, err := fs.file.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to seek to beginning of file %q: %w", fs.file.Name(), err)
+	}
+
+	data, err := io.ReadAll(fs.file)
+	if err != nil {
+		return fmt.Errorf("failed to read data from file %q: %w", fs.file.Name(), err)
+	}
+
+	if len(data) == 0 {
+		return nil
+	}
+
+	var list []*models.Metrics
+	if err = json.Unmarshal(data, &list); err != nil {
+		return fmt.Errorf("failed to decode metrics JSON from file %q: %w", fs.file.Name(), err)
+	}
+
+	for _, metric := range list {
+		switch metric.MType {
+		case models.Gauge:
+			err = fs.MemStorage.UpdateGauge(metric)
+			if err != nil {
+				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
+			}
+		case models.Counter:
+			err = fs.MemStorage.UpdateCounter(metric)
+			if err != nil {
+				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (fs *FileStorage) save() error {
 	fs.fileMutex.Lock()
 	defer fs.fileMutex.Unlock()
 
@@ -82,40 +169,8 @@ func (fs *FileStorage) SaveToFile() error {
 	return nil
 }
 
-func (fs *FileStorage) Restore() error {
-	if _, err := fs.file.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek to beginning of file %q: %w", fs.file.Name(), err)
-	}
-
-	data, err := io.ReadAll(fs.file)
-	if err != nil {
-		return fmt.Errorf("failed to read data from file %q: %w", fs.file.Name(), err)
-	}
-
-	if len(data) == 0 {
-		return nil
-	}
-
-	var list []*models.Metrics
-	if err = json.Unmarshal(data, &list); err != nil {
-		return fmt.Errorf("failed to decode metrics JSON from file %q: %w", fs.file.Name(), err)
-	}
-
-	for _, metric := range list {
-		switch metric.MType {
-		case models.Gauge:
-			err = fs.UpdateGauge(metric)
-			if err != nil {
-				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
-			}
-		case models.Counter:
-			err = fs.UpdateCounter(metric)
-			if err != nil {
-				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
-			}
-		}
-	}
-	return nil
+func (fs *FileStorage) close() error {
+	return fs.file.Close()
 }
 
 func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
@@ -123,8 +178,8 @@ func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
 		return err
 	}
 
-	if fs.cfg.StoreInterval == 0 {
-		return fs.SaveToFile()
+	if fs.isSync {
+		return fs.save()
 	}
 	return nil
 }
@@ -134,8 +189,8 @@ func (fs *FileStorage) UpdateCounter(metric *models.Metrics) error {
 		return err
 	}
 
-	if fs.cfg.StoreInterval == 0 {
-		return fs.SaveToFile()
+	if fs.isSync {
+		return fs.save()
 	}
 	return nil
 }
