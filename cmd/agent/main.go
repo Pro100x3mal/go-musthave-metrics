@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/logger"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
 	"go.uber.org/zap"
@@ -31,14 +32,15 @@ func run() error {
 		return err
 	}
 
-	if err = logger.Initialize(cfg); err != nil {
-		return err
+	logger, err := infrastructure.NewLogger(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer logger.Log.Sync()
+	defer logger.Sync()
 
 	repo := repositories.NewMemStorage()
 	collectService := services.NewMetricsCollectService(repo)
-	queryService := services.NewMetricsQueryService(repo)
+	queryService := services.NewMetricsQueryService(repo, logger)
 
 	newClient := services.NewClient(cfg)
 
@@ -50,16 +52,16 @@ func run() error {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Log.Info("shutting down gracefully...")
+			logger.Info("shutting down gracefully...")
 			return ctx.Err()
 		case <-tickerPoll.C:
 			if err = collectService.UpdateAllMetrics(); err != nil {
-				logger.Log.Error("failed to update metrics", zap.Error(err))
+				logger.Error("failed to update metrics", zap.Error(err))
 			}
 		case <-tickerReport.C:
 			queryService.SendMetrics(newClient)
 			if err = collectService.ResetPollCount(); err != nil {
-				logger.Log.Error("failed to reset poll count", zap.Error(err))
+				logger.Error("failed to reset poll count", zap.Error(err))
 			}
 		}
 	}

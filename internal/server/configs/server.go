@@ -30,19 +30,19 @@ func GetConfig() (*ServerConfig, error) {
 
 	flag.Parse()
 
-	if envServerAddr, exist := os.LookupEnv("ADDRESS"); exist {
+	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok {
 		if envServerAddr != "" {
 			cfg.ServerAddr = envServerAddr
 		}
 	}
 
-	if envLogLevel, exist := os.LookupEnv("LOG_LEVEL"); exist {
+	if envLogLevel, ok := os.LookupEnv("LOG_LEVEL"); ok {
 		if envLogLevel != "" {
 			cfg.LogLevel = envLogLevel
 		}
 	}
 
-	if envStoreInterval, exist := os.LookupEnv("STORE_INTERVAL"); exist {
+	if envStoreInterval, ok := os.LookupEnv("STORE_INTERVAL"); ok {
 		if envStoreInterval != "" {
 			var err error
 			storeInterval, err = strconv.Atoi(envStoreInterval)
@@ -56,13 +56,13 @@ func GetConfig() (*ServerConfig, error) {
 	}
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second
 
-	if envFileStoragePath, exist := os.LookupEnv("FILE_STORAGE_PATH"); exist {
+	if envFileStoragePath, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
 		if envFileStoragePath != "" {
 			cfg.FileStoragePath = envFileStoragePath
 		}
 	}
 
-	if envIsRestore, exist := os.LookupEnv("RESTORE"); exist {
+	if envIsRestore, ok := os.LookupEnv("RESTORE"); ok {
 		if envIsRestore != "" {
 			var err error
 			cfg.IsRestore, err = strconv.ParseBool(envIsRestore)

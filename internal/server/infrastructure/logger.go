@@ -1,4 +1,4 @@
-package logger
+package infrastructure
 
 import (
 	"fmt"
@@ -7,12 +7,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var Log = zap.NewNop()
-
-func Initialize(cfg *configs.ServerConfig) error {
+func NewLogger(cfg *configs.ServerConfig) (*zap.Logger, error) {
 	lvl, err := zap.ParseAtomicLevel(cfg.LogLevel)
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: invalid log level: %w", err)
+		return nil, fmt.Errorf("invalid log level: %w", err)
 	}
 
 	lConf := zap.NewDevelopmentConfig()
@@ -20,9 +18,8 @@ func Initialize(cfg *configs.ServerConfig) error {
 
 	zl, err := lConf.Build()
 	if err != nil {
-		return fmt.Errorf("failed to initialize logger: failed to build logger config: %w", err)
+		return nil, fmt.Errorf("failed to build logger config: %w", err)
 	}
 
-	Log = zl
-	return nil
+	return zl, nil
 }

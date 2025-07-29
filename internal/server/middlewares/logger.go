@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"go.uber.org/zap"
 )
 
@@ -43,26 +42,28 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
-func WithLogging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+func WithLogging(logger *zap.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
 
-		respData := newResponseData()
-		loggingWriter := newLoggingResponseWriter(w, respData)
+			respData := newResponseData()
+			loggingWriter := newLoggingResponseWriter(w, respData)
 
-		next.ServeHTTP(loggingWriter, r)
+			next.ServeHTTP(loggingWriter, r)
 
-		duration := time.Since(start)
+			duration := time.Since(start)
 
-		logger.Log.Info("incoming HTTP request",
-			zap.String("uri", r.RequestURI),
-			zap.String("method", r.Method),
-			zap.Duration("duration", duration),
-		)
+			logger.Info("incoming HTTP request",
+				zap.String("uri", r.RequestURI),
+				zap.String("method", r.Method),
+				zap.Duration("duration", duration),
+			)
 
-		logger.Log.Info("outgoing HTTP response",
-			zap.Int("status", respData.status),
-			zap.Int("size", respData.size),
-		)
-	})
+			logger.Info("outgoing HTTP response",
+				zap.Int("status", respData.status),
+				zap.Int("size", respData.size),
+			)
+		})
+	}
 }

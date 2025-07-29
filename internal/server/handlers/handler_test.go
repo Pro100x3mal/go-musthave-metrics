@@ -10,13 +10,15 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type mockUpdater struct{}
 
 func initRouterForTests() http.Handler {
 	mock := &mockUpdater{}
-	handler := NewMetricsHandler(mock)
+	zl := zap.NewNop()
+	handler := NewMetricsHandler(mock, zl)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)

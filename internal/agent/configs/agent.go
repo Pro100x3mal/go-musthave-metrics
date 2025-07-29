@@ -27,19 +27,19 @@ func GetConfig() (*AgentConfig, error) {
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 
-	if envServerAddr, exists := os.LookupEnv("ADDRESS"); exists {
+	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok {
 		if envServerAddr != "" {
 			cfg.ServerAddr = envServerAddr
 		}
 	}
 
-	if envLogLevel, exist := os.LookupEnv("LOG_LEVEL"); exist {
+	if envLogLevel, ok := os.LookupEnv("LOG_LEVEL"); ok {
 		if envLogLevel != "" {
 			cfg.LogLevel = envLogLevel
 		}
 	}
 
-	if envPollSecStr, exist := os.LookupEnv("POLL_INTERVAL"); exist {
+	if envPollSecStr, ok := os.LookupEnv("POLL_INTERVAL"); ok {
 		if envPollSecStr != "" {
 			envPollSecInt, err := strconv.Atoi(envPollSecStr)
 			if err != nil {
@@ -49,7 +49,7 @@ func GetConfig() (*AgentConfig, error) {
 		}
 	}
 
-	if envReportSecStr, exist := os.LookupEnv("REPORT_INTERVAL"); exist {
+	if envReportSecStr, ok := os.LookupEnv("REPORT_INTERVAL"); ok {
 		if envReportSecStr != "" {
 			envReportSecInt, err := strconv.Atoi(envReportSecStr)
 			if err != nil {

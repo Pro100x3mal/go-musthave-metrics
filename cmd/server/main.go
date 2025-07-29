@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os/signal"
 	"sync"
 	"syscall"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"go.uber.org/zap"
@@ -32,29 +33,30 @@ func run() error {
 		return err
 	}
 
-	if err = logger.Initialize(cfg); err != nil {
-		return err
+	logger, err := infrastructure.NewLogger(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer logger.Log.Sync()
+	defer logger.Sync()
 
 	var wg sync.WaitGroup
 
 	ms := repositories.NewMemStorage()
-	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg)
+	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
 	if err != nil {
 		return err
 	}
 
 	metricsService := services.NewMetricsService(repo)
-	metricsHandler := handlers.NewMetricsHandler(metricsService)
+	metricsHandler := handlers.NewMetricsHandler(metricsService, logger)
 
-	logger.Log.Info("starting application")
+	logger.Info("starting application")
 
 	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
-		logger.Log.Error("server failed", zap.Error(err))
+		logger.Error("server failed", zap.Error(err))
 	}
 
 	wg.Wait()
-	logger.Log.Info("application stopped gracefully")
+	logger.Info("application stopped gracefully")
 	return err
 }

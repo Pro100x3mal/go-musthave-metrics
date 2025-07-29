@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
@@ -19,11 +18,13 @@ type RepositoryReader interface {
 
 type MetricsQueryService struct {
 	reader RepositoryReader
+	logger *zap.Logger
 }
 
-func NewMetricsQueryService(reader RepositoryReader) *MetricsQueryService {
+func NewMetricsQueryService(reader RepositoryReader, logger *zap.Logger) *MetricsQueryService {
 	return &MetricsQueryService{
 		reader: reader,
+		logger: logger,
 	}
 }
 
@@ -59,7 +60,7 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			continue
 		}
 
-		logger.Log.Info("sending metric",
+		qs.logger.Info("sending metric",
 			zap.String("type", m.MType),
 			zap.String("id", m.ID),
 			zap.String("value", valueStr),
@@ -69,11 +70,11 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 		gz := gzip.NewWriter(buf)
 		err := json.NewEncoder(gz).Encode(m)
 		if err != nil {
-			logger.Log.Error("gzip encoding failed", zap.Error(err))
+			qs.logger.Error("gzip encoding failed", zap.Error(err))
 			continue
 		}
 		if err = gz.Close(); err != nil {
-			logger.Log.Error("failed to close gzip writer", zap.Error(err))
+			qs.logger.Error("failed to close gzip writer", zap.Error(err))
 			continue
 		}
 
@@ -84,7 +85,7 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 			Post("/update")
 
 		if err != nil {
-			logger.Log.Info("could not post metric to server",
+			qs.logger.Info("could not post metric to server",
 				zap.String("type", m.MType),
 				zap.String("id", m.ID),
 				zap.String("value", valueStr),
@@ -96,5 +97,5 @@ func (qs *MetricsQueryService) SendMetrics(c *Client) {
 
 	}
 
-	logger.Log.Info("all metrics was sent succesfully")
+	qs.logger.Info("all metrics was sent succesfully")
 }

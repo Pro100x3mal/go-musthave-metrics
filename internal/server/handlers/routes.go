@@ -6,8 +6,8 @@ import (
 )
 
 func initRoutes(r *chi.Mux, mh *MetricsHandler) {
-	r.Use(middlewares.WithLogging)
-	r.Use(middlewares.WithCompress)
+	r.Use(middlewares.WithLogging(mh.logger))
+	r.Use(middlewares.WithCompress(mh.logger))
 
 	r.Get("/", mh.ListAllMetricsHandler)
 	r.Route("/value", func(r chi.Router) {

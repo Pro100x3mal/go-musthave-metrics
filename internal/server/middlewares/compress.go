@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"go.uber.org/zap"
 )
 
@@ -93,35 +92,37 @@ func (cw *compressWriter) Close() error {
 	return nil
 }
 
-func WithCompress(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			cr, err := newCompressReader(r.Body)
-			if err != nil {
-				logger.Log.Error("compression error", zap.Error(err))
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+func WithCompress(logger *zap.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+				cr, err := newCompressReader(r.Body)
+				if err != nil {
+					logger.Error("compression error", zap.Error(err))
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				defer func() {
+					if err = cr.Close(); err != nil {
+						logger.Error("failed to close gzip reader", zap.Error(err))
+					}
+				}()
+				r.Body = cr
 			}
-			defer func() {
-				if err = cr.Close(); err != nil {
-					logger.Log.Error("failed to close gzip reader", zap.Error(err))
-				}
-			}()
-			r.Body = cr
-		}
 
-		wOut := w
+			wOut := w
 
-		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			cw := newCompressWriter(w)
-			wOut = cw
-			defer func() {
-				if err := cw.Close(); err != nil {
-					logger.Log.Error("failed to close gzip writer", zap.Error(err))
-				}
-			}()
-		}
+			if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				cw := newCompressWriter(w)
+				wOut = cw
+				defer func() {
+					if err := cw.Close(); err != nil {
+						logger.Error("failed to close gzip writer", zap.Error(err))
+					}
+				}()
+			}
 
-		next.ServeHTTP(wOut, r)
-	})
+			next.ServeHTTP(wOut, r)
+		})
+	}
 }

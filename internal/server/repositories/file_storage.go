@@ -10,41 +10,42 @@ import (
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"go.uber.org/zap"
 )
 
 type FileStorage struct {
 	*MemStorage
+	logger    *zap.Logger
 	file      *os.File
 	cfg       *configs.ServerConfig
 	fileMutex *sync.Mutex
 	isSync    bool
 }
 
-func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup) (*FileStorage, error) {
-	logger.Log.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
+func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup, logger *zap.Logger) (*FileStorage, error) {
+	logger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
 	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		logger.Log.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
+		logger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
 		return nil, err
 	}
 
 	fs := &FileStorage{
 		MemStorage: ms,
+		logger:     logger,
 		file:       file,
 		cfg:        cfg,
 		fileMutex:  &sync.Mutex{},
 	}
 
 	if cfg.IsRestore {
-		logger.Log.Info("restoring metrics from file", zap.String("path", cfg.FileStoragePath))
+		fs.logger.Info("restoring metrics from file", zap.String("path", cfg.FileStoragePath))
 		if err = fs.restore(); err != nil {
-			logger.Log.Error("failed to restore metrics from file", zap.Error(err))
+			fs.logger.Error("failed to restore metrics from file", zap.Error(err))
 			return nil, err
 		}
-		logger.Log.Info("metrics restored successfully")
+		fs.logger.Info("metrics restored successfully")
 	}
 
 	if cfg.StoreInterval == 0 {
@@ -55,32 +56,39 @@ func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStora
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runSaveByInterval(ctx, fs, cfg.StoreInterval)
+			fs.runSaveByInterval(ctx, cfg.StoreInterval)
 		}()
 	}
 
 	return fs, nil
 }
 
-func runSaveByInterval(ctx context.Context, fs *FileStorage, interval time.Duration) {
-	logger.Log.Info("starting auto save loop")
+func (fs *FileStorage) runSaveByInterval(ctx context.Context, interval time.Duration) {
+	fs.logger.Info("starting auto save loop")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			logger.Log.Info("running auto save loop")
+			fs.logger.Info("running auto save loop")
+
+			fs.MemStorage.mu.RLock()
 			if err := fs.save(); err != nil {
-				logger.Log.Error("failed to save metrics to file", zap.Error(err))
+				fs.logger.Error("failed to save metrics to file", zap.Error(err))
 			}
+			fs.MemStorage.mu.RUnlock()
 		case <-ctx.Done():
-			logger.Log.Info("stopping auto save loop")
+			fs.logger.Info("stopping auto save loop")
+
+			fs.MemStorage.mu.RLock()
 			if err := fs.save(); err != nil {
-				logger.Log.Error("failed to save metrics to file on shutdown", zap.Error(err))
+				fs.logger.Error("failed to save metrics to file on shutdown", zap.Error(err))
 			}
+			fs.MemStorage.mu.RUnlock()
+
 			if err := fs.close(); err != nil {
-				logger.Log.Error("failed to close file storage", zap.Error(err))
+				fs.logger.Error("failed to close file storage", zap.Error(err))
 			}
 			return
 		}

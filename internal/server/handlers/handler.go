@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -32,7 +31,7 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 		case errors.Is(err, models.ErrUnsupportedMetricType):
 			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
 		default:
-			logger.Log.Error("failed to update metric", zap.Error(err))
+			mh.logger.Error("failed to update metric", zap.Error(err))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 		return
@@ -88,7 +87,7 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte(mValue))
 	if err != nil {
-		logger.Log.Error("failed to write response", zap.Error(err))
+		mh.logger.Error("failed to write response", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -129,7 +128,7 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(respMetric)
 	if err != nil {
-		logger.Log.Error("failed to encode response", zap.Error(err))
+		mh.logger.Error("failed to encode response", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -156,7 +155,7 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 	w.WriteHeader(http.StatusOK)
 	_, err := io.WriteString(w, builder.String())
 	if err != nil {
-		logger.Log.Error("failed to write response", zap.Error(err))
+		mh.logger.Error("failed to write response", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
