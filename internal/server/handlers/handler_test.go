@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"io"
@@ -6,19 +6,31 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type mockUpdater struct{}
 
 func initRouterForTests() http.Handler {
 	mock := &mockUpdater{}
-	receiverHandler := newMetricsUpdateHandler(mock)
-	queryHandler := newMetricsQueryHandler(mock)
-	return newRouter(receiverHandler, queryHandler)
+	zl := zap.NewNop()
+	handler := NewMetricsHandler(mock, zl)
+
+	r := chi.NewRouter()
+	initRoutes(r, handler)
+	return r
+}
+
+func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+	return metric, nil
+}
+
+func (m *mockUpdater) UpdateJSONMetricFromParams(metric *models.Metrics) error {
+	return nil
 }
 
 func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error {
@@ -28,31 +40,31 @@ func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error 
 		case "123", "-321":
 			return nil
 		case "123.123":
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		case "123a":
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		default:
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		}
 	case "gauge":
 		switch mValue {
 		case "123.321", "-321.123", "123":
 			return nil
 		case "123.123":
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		case "123a":
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		default:
-			return service.ErrInvalidMetricValue
+			return models.ErrInvalidMetricValue
 		}
 	default:
-		return service.ErrUnsupportedMetricType
+		return models.ErrUnsupportedMetricType
 	}
 }
 
 func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	if mName != "test" {
-		return "", repository.ErrMetricNotFound
+		return "", models.ErrMetricNotFound
 	}
 	switch mType {
 	case "counter":
@@ -60,7 +72,7 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	case "gauge":
 		return "3.14", nil
 	default:
-		return "", service.ErrUnsupportedMetricType
+		return "", models.ErrUnsupportedMetricType
 	}
 }
 

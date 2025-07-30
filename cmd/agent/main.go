@@ -2,19 +2,24 @@ package main
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/config"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repository"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/service"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
+	"go.uber.org/zap"
 )
 
 func main() {
+	mainLogger := zap.NewExample()
+	defer mainLogger.Sync()
+
 	if err := run(); err != nil {
-		log.Fatal(err)
+		mainLogger.Fatal("application failed:", zap.Error(err))
 	}
 }
 
@@ -22,12 +27,22 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	cfg := config.GetConfig()
-	repo := repository.NewMemStorage()
-	collectService := service.NewMetricsCollectService(repo)
-	queryService := service.NewMetricsQueryService(repo)
+	cfg, err := configs.GetConfig()
+	if err != nil {
+		return err
+	}
 
-	newClient := service.NewClient(cfg)
+	logger, err := infrastructure.NewLogger(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize logger: %w", err)
+	}
+	defer logger.Sync()
+
+	repo := repositories.NewMemStorage()
+	collectService := services.NewMetricsCollectService(repo)
+	queryService := services.NewMetricsQueryService(repo, logger)
+
+	newClient := services.NewClient(cfg)
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
@@ -37,16 +52,16 @@ func run() error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("shutting down gracefully...")
+			logger.Info("shutting down gracefully...")
 			return ctx.Err()
 		case <-tickerPoll.C:
-			if err := collectService.UpdateAllMetrics(); err != nil {
-				log.Println("collect error:", err)
+			if err = collectService.UpdateAllMetrics(); err != nil {
+				logger.Error("failed to update metrics", zap.Error(err))
 			}
 		case <-tickerReport.C:
 			queryService.SendMetrics(newClient)
-			if err := collectService.ResetPollCount(); err != nil {
-				log.Println("collect error:", err)
+			if err = collectService.ResetPollCount(); err != nil {
+				logger.Error("failed to reset poll count", zap.Error(err))
 			}
 		}
 	}
