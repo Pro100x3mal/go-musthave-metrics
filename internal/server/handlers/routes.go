@@ -10,7 +10,9 @@ func initRoutes(r *chi.Mux, mh *MetricsHandler, db *DBHandler) {
 	r.Use(middlewares.WithCompress(mh.logger))
 
 	r.Get("/", mh.ListAllMetricsHandler)
-	r.Get("/ping", db.PingDBHandler)
+	if db != nil {
+		r.Get("/ping", db.PingDBHandler)
+	}
 	r.Route("/value", func(r chi.Router) {
 		r.Post("/", mh.GetJSONMetricHandler)
 		r.Get("/{mType}/{mName}", mh.GetMetricHandler)

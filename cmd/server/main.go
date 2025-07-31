@@ -39,15 +39,18 @@ func run() error {
 	}
 	defer logger.Sync()
 
-	dbRepo, err := repositories.NewDB(ctx, cfg)
-	if err != nil {
-		logger.Error("failed to initialize database connection", zap.Error(err))
-		return err
-	}
-	defer dbRepo.Close()
+	dbHandler := &handlers.DBHandler{}
+	if cfg.DatabaseDSN != "" {
+		dbRepo, err := repositories.NewDB(ctx, cfg)
+		if err != nil {
+			logger.Error("failed to initialize database connection", zap.Error(err))
+			return err
+		}
+		defer dbRepo.Close()
 
-	dbService := services.NewDBService(dbRepo)
-	dbHandler := handlers.NewDBHandler(dbService, logger)
+		dbService := services.NewDBService(dbRepo)
+		dbHandler = handlers.NewDBHandler(dbService, logger)
+	}
 
 	var wg sync.WaitGroup
 
