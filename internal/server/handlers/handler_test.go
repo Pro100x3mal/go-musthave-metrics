@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,15 +15,23 @@ import (
 )
 
 type mockUpdater struct{}
+type MockDBService struct{}
 
 func initRouterForTests() http.Handler {
-	mock := &mockUpdater{}
+	mockUpd := &mockUpdater{}
 	zl := zap.NewNop()
-	handler := NewMetricsHandler(mock, zl)
+	handler := NewMetricsHandler(mockUpd, zl)
+
+	mockDB := &MockDBService{}
+	dbHandler := NewDBHandler(mockDB, zl)
 
 	r := chi.NewRouter()
-	initRoutes(r, handler)
+	initRoutes(r, handler, dbHandler)
 	return r
+}
+
+func (m *MockDBService) CheckDBConnection(ctx context.Context) error {
+	return nil
 }
 
 func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
