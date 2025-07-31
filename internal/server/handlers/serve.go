@@ -42,9 +42,35 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *Met
 	}
 }
 
-func StartServer(ctx context.Context, cfg *configs.ServerConfig, mh *MetricsHandler) error {
+type DBServiceInterface interface {
+	CheckDBConnection(ctx context.Context) error
+}
+
+type DBHandler struct {
+	dbService DBServiceInterface
+	logger    *zap.Logger
+}
+
+func NewDBHandler(service DBServiceInterface, logger *zap.Logger) *DBHandler {
+	return &DBHandler{
+		dbService: service,
+		logger:    logger,
+	}
+}
+
+func (db *DBHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
+	if err := db.dbService.CheckDBConnection(r.Context()); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("OK"))
+}
+
+func StartServer(ctx context.Context, cfg *configs.ServerConfig, mh *MetricsHandler, db *DBHandler) error {
 	r := chi.NewRouter()
-	initRoutes(r, mh)
+	initRoutes(r, mh, db)
 
 	srv := &http.Server{
 		Addr:    cfg.ServerAddr,

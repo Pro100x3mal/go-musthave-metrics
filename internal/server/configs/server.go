@@ -14,6 +14,7 @@ type ServerConfig struct {
 	StoreInterval   time.Duration
 	FileStoragePath string
 	IsRestore       bool
+	DatabaseDSN     string
 }
 
 func GetConfig() (*ServerConfig, error) {
@@ -27,6 +28,7 @@ func GetConfig() (*ServerConfig, error) {
 	flag.IntVar(&storeInterval, "i", 300, "store interval in seconds")
 	flag.StringVar(&cfg.FileStoragePath, "f", "file_storage.json", "path to metrics storage file")
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
+	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database PostgreSQL DSN")
 
 	flag.Parse()
 
@@ -69,6 +71,12 @@ func GetConfig() (*ServerConfig, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse RESTORE value '%s' to boolean: %w", envIsRestore, err)
 			}
+		}
+	}
+
+	if envDatabaseDSN, ok := os.LookupEnv("DATABASE_DSN"); ok {
+		if envDatabaseDSN != "" {
+			cfg.DatabaseDSN = envDatabaseDSN
 		}
 	}
 

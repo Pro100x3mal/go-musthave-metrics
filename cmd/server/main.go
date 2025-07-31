@@ -39,6 +39,16 @@ func run() error {
 	}
 	defer logger.Sync()
 
+	dbRepo, err := repositories.NewDB(ctx, cfg)
+	if err != nil {
+		logger.Error("failed to initialize database connection", zap.Error(err))
+		return err
+	}
+	defer dbRepo.Close()
+
+	dbService := services.NewDBService(dbRepo)
+	dbHandler := handlers.NewDBHandler(dbService, logger)
+
 	var wg sync.WaitGroup
 
 	ms := repositories.NewMemStorage()
@@ -52,7 +62,7 @@ func run() error {
 
 	logger.Info("starting application")
 
-	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
+	if err = handlers.StartServer(ctx, cfg, metricsHandler, dbHandler); err != nil {
 		logger.Error("server failed", zap.Error(err))
 	}
 
