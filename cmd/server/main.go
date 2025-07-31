@@ -60,12 +60,12 @@ func run() error {
 		return err
 	}
 
-	metricsService := services.NewMetricsService(repo)
-	metricsHandler := handlers.NewMetricsHandler(metricsService, logger)
+	service := services.NewMetricsService(repo)
+	handler := handlers.NewMetricsHandler(service, logger)
 
 	logger.Info("starting application")
 
-	if err = handlers.StartServer(ctx, cfg, metricsHandler, dbHandler); err != nil {
+	if err = handler.StartServer(ctx, cfg, dbHandler); err != nil {
 		logger.Error("server failed", zap.Error(err))
 	}
 

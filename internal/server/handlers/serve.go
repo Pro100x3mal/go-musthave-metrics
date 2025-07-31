@@ -68,7 +68,7 @@ func (db *DBHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("OK"))
 }
 
-func StartServer(ctx context.Context, cfg *configs.ServerConfig, mh *MetricsHandler, db *DBHandler) error {
+func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig, db *DBHandler) error {
 	r := chi.NewRouter()
 	initRoutes(r, mh, db)
 
