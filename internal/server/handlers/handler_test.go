@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,13 +17,17 @@ import (
 type mockUpdater struct{}
 
 func initRouterForTests() http.Handler {
-	mock := &mockUpdater{}
+	mockUpd := &mockUpdater{}
 	zl := zap.NewNop()
-	handler := NewMetricsHandler(mock, zl)
+	handler := NewMetricsHandler(mockUpd, zl)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)
 	return r
+}
+
+func (m *mockUpdater) PingCheck(ctx context.Context) error {
+	return nil
 }
 
 func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {

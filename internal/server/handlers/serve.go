@@ -23,26 +23,37 @@ type MetricsServiceWriter interface {
 	UpdateJSONMetricFromParams(metric *models.Metrics) error
 }
 
+type MetricsServicePinger interface {
+	PingCheck(ctx context.Context) error
+}
+
 type MetricsServiceInterface interface {
 	MetricsServiceReader
 	MetricsServiceWriter
+	MetricsServicePinger
 }
 
 type MetricsHandler struct {
 	reader MetricsServiceReader
 	writer MetricsServiceWriter
+	pinger MetricsServicePinger
 	logger *zap.Logger
 }
 
 func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *MetricsHandler {
-	return &MetricsHandler{
+	mh := &MetricsHandler{
 		reader: service,
 		writer: service,
-		logger: logger,
+		logger: logger.With(zap.String("component", "metrics_handler")),
 	}
+
+	if p, ok := service.(MetricsServicePinger); ok {
+		mh.pinger = p
+	}
+	return mh
 }
 
-func StartServer(ctx context.Context, cfg *configs.ServerConfig, mh *MetricsHandler) error {
+func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig) error {
 	r := chi.NewRouter()
 	initRoutes(r, mh)
 
