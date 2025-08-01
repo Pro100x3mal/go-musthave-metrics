@@ -6,8 +6,8 @@ import (
 )
 
 func initRoutes(r *chi.Mux, mh *MetricsHandler, db *DBHandler) {
-	r.Use(middlewares.WithLogging(mh.logger))
-	r.Use(middlewares.WithCompress(mh.logger))
+	r.Use(middlewares.NewLoggerHandler(mh.logger).Middleware)
+	r.Use(middlewares.NewCompressHandler(mh.logger).Middleware)
 
 	r.Get("/", mh.ListAllMetricsHandler)
 	if db != nil {

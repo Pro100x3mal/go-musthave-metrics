@@ -7,14 +7,19 @@ import (
 	"go.uber.org/zap"
 )
 
+type LoggerHandler struct {
+	logger *zap.Logger
+}
+
+func NewLoggerHandler(logger *zap.Logger) *LoggerHandler {
+	return &LoggerHandler{
+		logger: logger.With(zap.String("middleware", "http_logger")),
+	}
+}
+
 type responseData struct {
 	status int
 	size   int
-}
-
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	responseData *responseData
 }
 
 func newResponseData() *responseData {
@@ -22,6 +27,11 @@ func newResponseData() *responseData {
 		status: http.StatusOK,
 		size:   0,
 	}
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	responseData *responseData
 }
 
 func newLoggingResponseWriter(w http.ResponseWriter, respData *responseData) *loggingResponseWriter {
@@ -42,28 +52,28 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
-func WithLogging(logger *zap.Logger) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
+func (lh *LoggerHandler) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 
-			respData := newResponseData()
-			loggingWriter := newLoggingResponseWriter(w, respData)
+		lh.logger.Info("incoming HTTP request",
+			zap.String("url", r.URL.String()),
+			zap.String("method", r.Method),
+			zap.String("remote_addr", r.RemoteAddr),
+		)
 
-			next.ServeHTTP(loggingWriter, r)
+		respData := newResponseData()
+		loggingWriter := newLoggingResponseWriter(w, respData)
 
-			duration := time.Since(start)
+		next.ServeHTTP(loggingWriter, r)
 
-			logger.Info("incoming HTTP request",
-				zap.String("uri", r.RequestURI),
-				zap.String("method", r.Method),
-				zap.Duration("duration", duration),
-			)
+		duration := time.Since(start)
 
-			logger.Info("outgoing HTTP response",
-				zap.Int("status", respData.status),
-				zap.Int("size", respData.size),
-			)
-		})
-	}
+		lh.logger.Info("outgoing HTTP response",
+			zap.Int("status", respData.status),
+			zap.Int("size", respData.size),
+			zap.Duration("duration", duration),
+		)
+	})
+
 }

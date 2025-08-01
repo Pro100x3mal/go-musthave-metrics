@@ -38,7 +38,7 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *Met
 	return &MetricsHandler{
 		reader: service,
 		writer: service,
-		logger: logger,
+		logger: logger.With(zap.String("component", "metrics_handler")),
 	}
 }
 
