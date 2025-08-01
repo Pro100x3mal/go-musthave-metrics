@@ -1,38 +1,35 @@
 package services
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 )
 
-type MetricsRepositoryReader interface {
-	GetGauge(mName string) (float64, error)
-	GetCounter(mName string) (int64, error)
-	GetAllGauges() map[string]float64
-	GetAllCounters() map[string]int64
-}
-
-type MetricsRepositoryWriter interface {
-	UpdateGauge(metric *models.Metrics) error
-	UpdateCounter(metric *models.Metrics) error
-}
-
-type MetricsRepositoryInterface interface {
-	MetricsRepositoryReader
-	MetricsRepositoryWriter
+type MetricsRepositoryPinger interface {
+	Ping(ctx context.Context) error
 }
 
 type MetricsService struct {
-	reader MetricsRepositoryReader
-	writer MetricsRepositoryWriter
+	reader repositories.RepositoryReader
+	writer repositories.RepositoryWriter
+	pinger MetricsRepositoryPinger
 }
 
-func NewMetricsService(repository MetricsRepositoryInterface) *MetricsService {
-	return &MetricsService{
+func NewMetricsService(repository repositories.Repository) *MetricsService {
+	ms := &MetricsService{
 		reader: repository,
 		writer: repository,
 	}
+
+	if p, ok := repository.(MetricsRepositoryPinger); ok {
+		ms.pinger = p
+	}
+	return ms
 }
 
 func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
@@ -75,7 +72,8 @@ func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) err
 	}
 }
 
-func (ms *MetricsService) GetMetricValue(mType, mName string) (string, error) {
+func (ms *MetricsService) GetMetricValue(mType,
+	mName string) (string, error) {
 	switch mType {
 	case models.Gauge:
 		value, err := ms.reader.GetGauge(mName)
@@ -119,15 +117,30 @@ func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Me
 	}
 }
 
-func (ms *MetricsService) GetAllMetrics() map[string]string {
+func (ms *MetricsService) GetAllMetrics() (map[string]string, error) {
 	list := make(map[string]string)
 
-	for name, value := range ms.reader.GetAllGauges() {
+	gauges, err := ms.reader.GetAllGauges()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	for name, value := range gauges {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	for name, value := range ms.reader.GetAllCounters() {
-		list[name] = strconv.FormatInt(value, 10)
+	counters, err := ms.reader.GetAllCounters()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
 	}
-	return list
+	for name, delta := range counters {
+		list[name] = strconv.FormatInt(delta, 10)
+	}
+	return list, nil
+}
+
+func (ms *MetricsService) PingCheck(ctx context.Context) error {
+	if ms.pinger == nil {
+		return errors.New("pinging not supported by this repository")
+	}
+	return ms.pinger.Ping(ctx)
 }

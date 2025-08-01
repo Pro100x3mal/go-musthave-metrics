@@ -24,16 +24,17 @@ type FileStorage struct {
 }
 
 func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup, logger *zap.Logger) (*FileStorage, error) {
-	logger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
+	fsLogger := logger.With(zap.String("component", "file_storage"))
+	fsLogger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
 	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		logger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
+		fsLogger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
 		return nil, err
 	}
 
 	fs := &FileStorage{
 		MemStorage: ms,
-		logger:     logger,
+		logger:     fsLogger,
 		file:       file,
 		cfg:        cfg,
 		fileMutex:  &sync.Mutex{},

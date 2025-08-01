@@ -39,20 +39,33 @@ func run() error {
 	}
 	defer logger.Sync()
 
-	var wg sync.WaitGroup
+	var (
+		wg   sync.WaitGroup
+		repo repositories.Repository
+	)
 
 	ms := repositories.NewMemStorage()
-	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
+	repo, err = repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
 	if err != nil {
 		return err
 	}
 
-	metricsService := services.NewMetricsService(repo)
-	metricsHandler := handlers.NewMetricsHandler(metricsService, logger)
+	if cfg.DatabaseDSN != "" {
+		dbRepo, err := repositories.NewDB(ctx, cfg)
+		if err != nil {
+			logger.Error("failed to initialize database connection", zap.Error(err))
+			return err
+		}
+		defer dbRepo.Close()
+		repo = dbRepo
+	}
+
+	service := services.NewMetricsService(repo)
+	handler := handlers.NewMetricsHandler(service, logger)
 
 	logger.Info("starting application")
 
-	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
+	if err = handler.StartServer(ctx, cfg); err != nil {
 		logger.Error("server failed", zap.Error(err))
 	}
 
