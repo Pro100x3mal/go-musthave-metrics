@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,5 +47,37 @@ func (db *DB) Close() {
 }
 
 func (db *DB) Ping(ctx context.Context) error {
-	return db.pool.Ping(ctx)
+	err := db.pool.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+	return nil
+}
+
+func (db *DB) UpdateGauge(metric *models.Metrics) error {
+
+	return nil
+}
+
+func (db *DB) UpdateCounter(metric *models.Metrics) error {
+
+	return nil
+}
+
+func (db *DB) GetGauge(id string) (float64, error) {
+
+	return 0, nil
+}
+
+func (db *DB) GetCounter(id string) (int64, error) {
+
+	return 0, nil
+}
+
+func (db *DB) GetAllGauges() map[string]float64 {
+	return nil
+}
+
+func (db *DB) GetAllCounters() map[string]int64 {
+	return nil
 }

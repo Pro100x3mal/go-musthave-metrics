@@ -39,7 +39,17 @@ func run() error {
 	}
 	defer logger.Sync()
 
-	dbHandler := &handlers.DBHandler{}
+	var (
+		wg   sync.WaitGroup
+		repo repositories.Repository
+	)
+
+	ms := repositories.NewMemStorage()
+	repo, err = repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
+	if err != nil {
+		return err
+	}
+
 	if cfg.DatabaseDSN != "" {
 		dbRepo, err := repositories.NewDB(ctx, cfg)
 		if err != nil {
@@ -47,17 +57,7 @@ func run() error {
 			return err
 		}
 		defer dbRepo.Close()
-
-		dbService := services.NewDBService(dbRepo)
-		dbHandler = handlers.NewDBHandler(dbService, logger)
-	}
-
-	var wg sync.WaitGroup
-
-	ms := repositories.NewMemStorage()
-	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
-	if err != nil {
-		return err
+		repo = dbRepo
 	}
 
 	service := services.NewMetricsService(repo)
@@ -65,7 +65,7 @@ func run() error {
 
 	logger.Info("starting application")
 
-	if err = handler.StartServer(ctx, cfg, dbHandler); err != nil {
+	if err = handler.StartServer(ctx, cfg); err != nil {
 		logger.Error("server failed", zap.Error(err))
 	}
 

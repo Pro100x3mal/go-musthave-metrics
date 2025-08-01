@@ -5,14 +5,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func initRoutes(r *chi.Mux, mh *MetricsHandler, db *DBHandler) {
+func initRoutes(r *chi.Mux, mh *MetricsHandler) {
 	r.Use(middlewares.NewLoggerHandler(mh.logger).Middleware)
 	r.Use(middlewares.NewCompressHandler(mh.logger).Middleware)
 
 	r.Get("/", mh.ListAllMetricsHandler)
-	if db != nil {
-		r.Get("/ping", db.PingDBHandler)
-	}
+	r.Get("/ping", mh.PingDBHandler)
 	r.Route("/value", func(r chi.Router) {
 		r.Post("/", mh.GetJSONMetricHandler)
 		r.Get("/{mType}/{mName}", mh.GetMetricHandler)

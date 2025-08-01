@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
@@ -159,4 +161,24 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
+	if mh.pinger == nil {
+		mh.logger.Warn("database connection check functionality not implemented for current storage type")
+		http.Error(w, "Database connection check functionality not implemented for current storage type", http.StatusNotImplemented)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := mh.pinger.PingCheck(ctx); err != nil {
+		mh.logger.Error("database ping check failed", zap.Error(err))
+		http.Error(w, "Database connection check failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 }

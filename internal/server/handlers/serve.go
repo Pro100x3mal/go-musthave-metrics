@@ -23,54 +23,39 @@ type MetricsServiceWriter interface {
 	UpdateJSONMetricFromParams(metric *models.Metrics) error
 }
 
+type MetricsServicePinger interface {
+	PingCheck(ctx context.Context) error
+}
+
 type MetricsServiceInterface interface {
 	MetricsServiceReader
 	MetricsServiceWriter
+	MetricsServicePinger
 }
 
 type MetricsHandler struct {
 	reader MetricsServiceReader
 	writer MetricsServiceWriter
+	pinger MetricsServicePinger
 	logger *zap.Logger
 }
 
 func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *MetricsHandler {
-	return &MetricsHandler{
+	mh := &MetricsHandler{
 		reader: service,
 		writer: service,
 		logger: logger.With(zap.String("component", "metrics_handler")),
 	}
-}
 
-type DBServiceInterface interface {
-	CheckDBConnection(ctx context.Context) error
-}
-
-type DBHandler struct {
-	dbService DBServiceInterface
-	logger    *zap.Logger
-}
-
-func NewDBHandler(service DBServiceInterface, logger *zap.Logger) *DBHandler {
-	return &DBHandler{
-		dbService: service,
-		logger:    logger,
+	if p, ok := service.(MetricsServicePinger); ok {
+		mh.pinger = p
 	}
+	return mh
 }
 
-func (db *DBHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
-	if err := db.dbService.CheckDBConnection(r.Context()); err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK"))
-}
-
-func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig, db *DBHandler) error {
+func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig) error {
 	r := chi.NewRouter()
-	initRoutes(r, mh, db)
+	initRoutes(r, mh)
 
 	srv := &http.Server{
 		Addr:    cfg.ServerAddr,

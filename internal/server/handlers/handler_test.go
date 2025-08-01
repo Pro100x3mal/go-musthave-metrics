@@ -15,22 +15,18 @@ import (
 )
 
 type mockUpdater struct{}
-type MockDBService struct{}
 
 func initRouterForTests() http.Handler {
 	mockUpd := &mockUpdater{}
 	zl := zap.NewNop()
 	handler := NewMetricsHandler(mockUpd, zl)
 
-	mockDB := &MockDBService{}
-	dbHandler := NewDBHandler(mockDB, zl)
-
 	r := chi.NewRouter()
-	initRoutes(r, handler, dbHandler)
+	initRoutes(r, handler)
 	return r
 }
 
-func (m *MockDBService) CheckDBConnection(ctx context.Context) error {
+func (m *mockUpdater) PingCheck(ctx context.Context) error {
 	return nil
 }
 
