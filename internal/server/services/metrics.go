@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
@@ -116,17 +117,25 @@ func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Me
 	}
 }
 
-func (ms *MetricsService) GetAllMetrics() map[string]string {
+func (ms *MetricsService) GetAllMetrics() (map[string]string, error) {
 	list := make(map[string]string)
 
-	for name, value := range ms.reader.GetAllGauges() {
+	gauges, err := ms.reader.GetAllGauges()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	for name, value := range gauges {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	for name, value := range ms.reader.GetAllCounters() {
-		list[name] = strconv.FormatInt(value, 10)
+	counters, err := ms.reader.GetAllCounters()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
 	}
-	return list
+	for name, delta := range counters {
+		list[name] = strconv.FormatInt(delta, 10)
+	}
+	return list, nil
 }
 
 func (ms *MetricsService) PingCheck(ctx context.Context) error {

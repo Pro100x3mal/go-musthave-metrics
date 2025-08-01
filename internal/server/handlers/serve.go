@@ -15,7 +15,7 @@ import (
 type MetricsServiceReader interface {
 	GetMetricValue(mType, mName string) (string, error)
 	GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error)
-	GetAllMetrics() map[string]string
+	GetAllMetrics() (map[string]string, error)
 }
 
 type MetricsServiceWriter interface {

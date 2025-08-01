@@ -5,8 +5,8 @@ import "github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 type RepositoryReader interface {
 	GetGauge(mName string) (float64, error)
 	GetCounter(mName string) (int64, error)
-	GetAllGauges() map[string]float64
-	GetAllCounters() map[string]int64
+	GetAllGauges() (map[string]float64, error)
+	GetAllCounters() (map[string]int64, error)
 }
 
 type RepositoryWriter interface {

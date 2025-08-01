@@ -26,7 +26,7 @@ func initRouterForTests() http.Handler {
 	return r
 }
 
-func (m *mockUpdater) PingCheck(ctx context.Context) error {
+func (m *mockUpdater) PingCheck(_ context.Context) error {
 	return nil
 }
 
@@ -34,11 +34,11 @@ func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metric
 	return metric, nil
 }
 
-func (m *mockUpdater) UpdateJSONMetricFromParams(metric *models.Metrics) error {
+func (m *mockUpdater) UpdateJSONMetricFromParams(_ *models.Metrics) error {
 	return nil
 }
 
-func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error {
+func (m *mockUpdater) UpdateMetricFromParams(mType, _, mValue string) error {
 	switch mType {
 	case "counter":
 		switch mValue {
@@ -81,11 +81,11 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
-func (m *mockUpdater) GetAllMetrics() map[string]string {
+func (m *mockUpdater) GetAllMetrics() (map[string]string, error) {
 	return map[string]string{
 		"test_counter": "42",
 		"test_gauge":   "3.14",
-	}
+	}, nil
 }
 
 func TestUpdateMetricsHandler(t *testing.T) {
