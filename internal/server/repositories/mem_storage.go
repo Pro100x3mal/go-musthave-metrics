@@ -43,6 +43,32 @@ func (m *MemStorage) UpdateCounter(metric *models.Metrics) error {
 	return nil
 }
 
+func (m *MemStorage) UpdateMetrics(metrics []models.Metrics) error {
+	if metrics == nil {
+		return errors.New("no metrics provided: slice is nil")
+	}
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value == nil {
+				return errors.New("nil gauge value")
+			}
+			m.mu.Lock()
+			m.gauges[metric.ID] = *metric.Value
+			m.mu.Unlock()
+		case models.Counter:
+			if metric.Delta == nil {
+				return errors.New("nil counter delta")
+			}
+			m.mu.Lock()
+			m.counters[metric.ID] += *metric.Delta
+			m.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
 func (m *MemStorage) GetGauge(id string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

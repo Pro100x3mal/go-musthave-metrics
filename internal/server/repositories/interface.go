@@ -12,6 +12,7 @@ type RepositoryReader interface {
 type RepositoryWriter interface {
 	UpdateGauge(metric *models.Metrics) error
 	UpdateCounter(metric *models.Metrics) error
+	UpdateMetrics(metrics []models.Metrics) error
 }
 
 type Repository interface {

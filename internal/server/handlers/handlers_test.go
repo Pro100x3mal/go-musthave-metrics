@@ -26,6 +26,10 @@ func initRouterForTests() http.Handler {
 	return r
 }
 
+func (m *mockUpdater) UpdateJSONMetrics(_ []models.Metrics) error {
+	return nil
+}
+
 func (m *mockUpdater) PingCheck(_ context.Context) error {
 	return nil
 }
@@ -34,7 +38,7 @@ func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metric
 	return metric, nil
 }
 
-func (m *mockUpdater) UpdateJSONMetricFromParams(_ *models.Metrics) error {
+func (m *mockUpdater) UpdateJSONMetric(_ *models.Metrics) error {
 	return nil
 }
 

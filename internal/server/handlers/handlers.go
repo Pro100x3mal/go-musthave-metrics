@@ -61,7 +61,37 @@ func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = mh.writer.UpdateJSONMetricFromParams(&metric)
+	err = mh.writer.UpdateJSONMetric(&metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (mh *MetricsHandler) UpdateBatchJSONHandler(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	var metrics []models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&metrics)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	for _, metric := range metrics {
+		if metric.ID == "" || metric.MType == "" {
+			http.Error(w, "Missing required metric fields", http.StatusBadRequest)
+			return
+		}
+	}
+
+	err = mh.writer.UpdateJSONMetrics(metrics)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

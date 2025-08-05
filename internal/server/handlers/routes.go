@@ -11,6 +11,7 @@ func initRoutes(r *chi.Mux, mh *MetricsHandler) {
 
 	r.Get("/", mh.ListAllMetricsHandler)
 	r.Get("/ping", mh.PingDBHandler)
+	r.Post("/updates/", mh.UpdateBatchJSONHandler)
 	r.Route("/value", func(r chi.Router) {
 		r.Post("/", mh.GetJSONMetricHandler)
 		r.Get("/{mType}/{mName}", mh.GetMetricHandler)
