@@ -119,6 +119,9 @@ func (db *DB) UpdateMetrics(metrics []models.Metrics) error {
 		ON CONFLICT (id) DO UPDATE
 		SET value = $2
 	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare insert_gauges statement: %w", err)
+	}
 
 	_, err = tx.Prepare(ctx, "insert_counters", `
 		INSERT INTO counters (id, delta)
@@ -127,7 +130,7 @@ func (db *DB) UpdateMetrics(metrics []models.Metrics) error {
 		SET delta = counters.delta + $2
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
+		return fmt.Errorf("failed to prepare insert_counters statement: %w", err)
 	}
 
 	for _, metric := range metrics {
