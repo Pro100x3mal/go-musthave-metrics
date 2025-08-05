@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
@@ -135,7 +137,16 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := mh.reader.GetAllMetrics()
+	list, err := mh.reader.GetAllMetrics()
+	if err != nil {
+		if errors.Is(err, models.ErrMetricNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		mh.logger.Error("failed to get all metrics", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 
 	keys := make([]string, 0, len(list))
 	for name := range list {
@@ -153,10 +164,30 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, err := io.WriteString(w, builder.String())
+	_, err = io.WriteString(w, builder.String())
 	if err != nil {
 		mh.logger.Error("failed to write response", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
+	if mh.pinger == nil {
+		mh.logger.Error("database connection check functionality not implemented for current storage type")
+		http.Error(w, "Database connection check functionality not implemented for current storage type", http.StatusNotImplemented)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	if err := mh.pinger.PingCheck(ctx); err != nil {
+		mh.logger.Error("database ping check failed", zap.Error(err))
+		http.Error(w, "Database connection check failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 }

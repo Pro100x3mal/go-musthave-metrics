@@ -63,14 +63,22 @@ func (m *MemStorage) GetCounter(id string) (int64, error) {
 	return v, nil
 }
 
-func (m *MemStorage) GetAllGauges() map[string]float64 {
+func (m *MemStorage) GetAllGauges() (map[string]float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.gauges
+
+	if m.gauges == nil {
+		return nil, models.ErrMetricNotFound
+	}
+	return m.gauges, nil
 }
 
-func (m *MemStorage) GetAllCounters() map[string]int64 {
+func (m *MemStorage) GetAllCounters() (map[string]int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.counters
+
+	if m.counters == nil {
+		return nil, models.ErrMetricNotFound
+	}
+	return m.counters, nil
 }
