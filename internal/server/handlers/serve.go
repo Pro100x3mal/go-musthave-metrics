@@ -20,8 +20,7 @@ type MetricsServiceReader interface {
 
 type MetricsServiceWriter interface {
 	UpdateMetricFromParams(mType, mName, mValue string) error
-	UpdateJSONMetric(metric *models.Metrics) error
-	UpdateJSONMetrics(metric []models.Metrics) error
+	UpdateJSONMetricFromParams(metric *models.Metrics) error
 }
 
 type MetricsServicePinger interface {

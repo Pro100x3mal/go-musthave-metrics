@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"strconv"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
@@ -39,92 +40,61 @@ func NewClient(cfg *configs.AgentConfig) *Client {
 }
 
 func (qs *MetricsQueryService) SendMetrics(c *Client) {
-	//metrics := qs.reader.GetAllMetrics()
-	//
-	//for _, m := range metrics {
-	//	var valueStr string
-	//
-	//	switch m.MType {
-	//	case models.Gauge:
-	//		if m.Value == nil {
-	//			continue
-	//		}
-	//		valueStr = strconv.FormatFloat(*m.Value, 'f', -1, 64)
-	//	case models.Counter:
-	//		if m.Delta == nil {
-	//			continue
-	//		}
-	//		valueStr = strconv.FormatInt(*m.Delta, 10)
-	//	default:
-	//		continue
-	//	}
-	//
-	//	qs.logger.Info("sending metric",
-	//		zap.String("type", m.MType),
-	//		zap.String("id", m.ID),
-	//		zap.String("value", valueStr),
-	//	)
-	//
-	//	buf := &bytes.Buffer{}
-	//	gz := gzip.NewWriter(buf)
-	//	err := json.NewEncoder(gz).Encode(m)
-	//	if err != nil {
-	//		qs.logger.Error("gzip encoding failed", zap.Error(err))
-	//		continue
-	//	}
-	//	if err = gz.Close(); err != nil {
-	//		qs.logger.Error("failed to close gzip writer", zap.Error(err))
-	//		continue
-	//	}
-	//
-	//	_, err = c.client.R().
-	//		SetHeader("Content-Encoding", "gzip").
-	//		SetHeader("Content-Type", "application/json").
-	//		SetBody(buf.Bytes()).
-	//		Post("/update")
-	//
-	//	if err != nil {
-	//		qs.logger.Info("could not post metric to server",
-	//			zap.String("type", m.MType),
-	//			zap.String("id", m.ID),
-	//			zap.String("value", valueStr),
-	//			zap.String("url", "/update"),
-	//			zap.Error(err),
-	//		)
-	//		continue
-	//	}
-	//
-	//}
-	//
-	//qs.logger.Info("all metrics was sent succesfully")
-
 	metrics := qs.reader.GetAllMetrics()
-	if len(metrics) == 0 {
-		qs.logger.Info("no metrics to send")
-		return
-	}
 
-	buf := &bytes.Buffer{}
-	gz := gzip.NewWriter(buf)
-	err := json.NewEncoder(gz).Encode(metrics)
-	if err != nil {
-		qs.logger.Error("gzip encoding failed", zap.Error(err))
-	}
-	if err = gz.Close(); err != nil {
-		qs.logger.Error("failed to close gzip writer", zap.Error(err))
-	}
+	for _, m := range metrics {
+		var valueStr string
 
-	_, err = c.client.R().
-		SetHeader("Content-Encoding", "gzip").
-		SetHeader("Content-Type", "application/json").
-		SetBody(buf.Bytes()).
-		Post("/updates/")
+		switch m.MType {
+		case models.Gauge:
+			if m.Value == nil {
+				continue
+			}
+			valueStr = strconv.FormatFloat(*m.Value, 'f', -1, 64)
+		case models.Counter:
+			if m.Delta == nil {
+				continue
+			}
+			valueStr = strconv.FormatInt(*m.Delta, 10)
+		default:
+			continue
+		}
 
-	if err != nil {
-		qs.logger.Info("could not post metric to server",
-			zap.String("url", "/updates"),
-			zap.Error(err),
+		qs.logger.Info("sending metric",
+			zap.String("type", m.MType),
+			zap.String("id", m.ID),
+			zap.String("value", valueStr),
 		)
+
+		buf := &bytes.Buffer{}
+		gz := gzip.NewWriter(buf)
+		err := json.NewEncoder(gz).Encode(m)
+		if err != nil {
+			qs.logger.Error("gzip encoding failed", zap.Error(err))
+			continue
+		}
+		if err = gz.Close(); err != nil {
+			qs.logger.Error("failed to close gzip writer", zap.Error(err))
+			continue
+		}
+
+		_, err = c.client.R().
+			SetHeader("Content-Encoding", "gzip").
+			SetHeader("Content-Type", "application/json").
+			SetBody(buf.Bytes()).
+			Post("/update")
+
+		if err != nil {
+			qs.logger.Info("could not post metric to server",
+				zap.String("type", m.MType),
+				zap.String("id", m.ID),
+				zap.String("value", valueStr),
+				zap.String("url", "/update"),
+				zap.Error(err),
+			)
+			continue
+		}
+
 	}
 
 	qs.logger.Info("all metrics was sent succesfully")

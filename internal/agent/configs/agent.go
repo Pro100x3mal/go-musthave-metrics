@@ -27,28 +27,36 @@ func GetConfig() (*AgentConfig, error) {
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()
 
-	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
-		cfg.ServerAddr = envServerAddr
-	}
-
-	if envLogLevel, ok := os.LookupEnv("LOG_LEVEL"); ok && envLogLevel != "" {
-		cfg.LogLevel = envLogLevel
-	}
-
-	if envPollSecStr, ok := os.LookupEnv("POLL_INTERVAL"); ok && envPollSecStr != "" {
-		envPollSecInt, err := strconv.Atoi(envPollSecStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse POLL_INTERVAL value '%s' to integer: %w", envPollSecStr, err)
+	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok {
+		if envServerAddr != "" {
+			cfg.ServerAddr = envServerAddr
 		}
-		pollSec = envPollSecInt
 	}
 
-	if envReportSecStr, ok := os.LookupEnv("REPORT_INTERVAL"); ok && envReportSecStr != "" {
-		envReportSecInt, err := strconv.Atoi(envReportSecStr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse REPORT_INTERVAL value '%s' to integer: %w", envReportSecStr, err)
+	if envLogLevel, ok := os.LookupEnv("LOG_LEVEL"); ok {
+		if envLogLevel != "" {
+			cfg.LogLevel = envLogLevel
 		}
-		reportSec = envReportSecInt
+	}
+
+	if envPollSecStr, ok := os.LookupEnv("POLL_INTERVAL"); ok {
+		if envPollSecStr != "" {
+			envPollSecInt, err := strconv.Atoi(envPollSecStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse POLL_INTERVAL value '%s' to integer: %w", envPollSecStr, err)
+			}
+			pollSec = envPollSecInt
+		}
+	}
+
+	if envReportSecStr, ok := os.LookupEnv("REPORT_INTERVAL"); ok {
+		if envReportSecStr != "" {
+			envReportSecInt, err := strconv.Atoi(envReportSecStr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse REPORT_INTERVAL value '%s' to integer: %w", envReportSecStr, err)
+			}
+			reportSec = envReportSecInt
+		}
 	}
 
 	cfg.PollInterval = time.Duration(pollSec) * time.Second

@@ -57,7 +57,7 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 	}
 }
 
-func (ms *MetricsService) UpdateJSONMetric(metric *models.Metrics) error {
+func (ms *MetricsService) UpdateJSONMetricFromParams(metric *models.Metrics) error {
 	if metric == nil {
 		return models.ErrMetricNotFound
 	}
@@ -70,13 +70,6 @@ func (ms *MetricsService) UpdateJSONMetric(metric *models.Metrics) error {
 	default:
 		return models.ErrUnsupportedMetricType
 	}
-}
-
-func (ms *MetricsService) UpdateJSONMetrics(metrics []models.Metrics) error {
-	if metrics == nil {
-		return models.ErrMetricNotFound
-	}
-	return ms.writer.UpdateMetrics(metrics)
 }
 
 func (ms *MetricsService) GetMetricValue(mType,
