@@ -1,18 +1,22 @@
 package repositories
 
-import "github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+import (
+	"context"
+
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
+)
 
 type RepositoryReader interface {
-	GetGauge(mName string) (float64, error)
-	GetCounter(mName string) (int64, error)
-	GetAllGauges() (map[string]float64, error)
-	GetAllCounters() (map[string]int64, error)
+	GetGauge(ctx context.Context, mName string) (float64, error)
+	GetCounter(ctx context.Context, mName string) (int64, error)
+	GetAllGauges(ctx context.Context) (map[string]float64, error)
+	GetAllCounters(ctx context.Context) (map[string]int64, error)
 }
 
 type RepositoryWriter interface {
-	UpdateGauge(metric *models.Metrics) error
-	UpdateCounter(metric *models.Metrics) error
-	UpdateMetrics(metrics []models.Metrics) error
+	UpdateGauge(ctx context.Context, metric *models.Metrics) error
+	UpdateCounter(ctx context.Context, metric *models.Metrics) error
+	UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 }
 
 type Repository interface {

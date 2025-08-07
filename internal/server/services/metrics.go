@@ -32,7 +32,7 @@ func NewMetricsService(repository repositories.Repository) *MetricsService {
 	return ms
 }
 
-func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) error {
+func (ms *MetricsService) UpdateMetricFromParams(ctx context.Context, mType, mName, mValue string) error {
 	var metric models.Metrics
 	metric.ID = mName
 	metric.MType = mType
@@ -44,52 +44,51 @@ func (ms *MetricsService) UpdateMetricFromParams(mType, mName, mValue string) er
 			return models.ErrInvalidMetricValue
 		}
 		metric.Value = &value
-		return ms.writer.UpdateGauge(&metric)
+		return ms.writer.UpdateGauge(ctx, &metric)
 	case models.Counter:
 		delta, err := strconv.ParseInt(mValue, 10, 64)
 		if err != nil {
 			return models.ErrInvalidMetricValue
 		}
 		metric.Delta = &delta
-		return ms.writer.UpdateCounter(&metric)
+		return ms.writer.UpdateCounter(ctx, &metric)
 	default:
 		return models.ErrUnsupportedMetricType
 	}
 }
 
-func (ms *MetricsService) UpdateJSONMetric(metric *models.Metrics) error {
+func (ms *MetricsService) UpdateJSONMetric(ctx context.Context, metric *models.Metrics) error {
 	if metric == nil {
 		return models.ErrMetricNotFound
 	}
 
 	switch metric.MType {
 	case models.Gauge:
-		return ms.writer.UpdateGauge(metric)
+		return ms.writer.UpdateGauge(ctx, metric)
 	case models.Counter:
-		return ms.writer.UpdateCounter(metric)
+		return ms.writer.UpdateCounter(ctx, metric)
 	default:
 		return models.ErrUnsupportedMetricType
 	}
 }
 
-func (ms *MetricsService) UpdateJSONMetrics(metrics []models.Metrics) error {
+func (ms *MetricsService) UpdateJSONMetrics(ctx context.Context, metrics []models.Metrics) error {
 	if metrics == nil {
 		return models.ErrMetricNotFound
 	}
-	return ms.writer.UpdateMetrics(metrics)
+	return ms.writer.UpdateMetrics(ctx, metrics)
 }
 
-func (ms *MetricsService) GetMetricValue(mType,
-	mName string) (string, error) {
+func (ms *MetricsService) GetMetricValue(ctx context.Context, mType, mName string) (string, error) {
 	switch mType {
 	case models.Gauge:
-		value, err := ms.reader.GetGauge(mName)
+		value, err := ms.reader.GetGauge(ctx, mName)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatFloat(value, 'f', -1, 64), nil
 	case models.Counter:
-		value, err := ms.reader.GetCounter(mName)
+		value, err := ms.reader.GetCounter(ctx, mName)
 		if err != nil {
 			return "", err
 		}
@@ -99,21 +98,21 @@ func (ms *MetricsService) GetMetricValue(mType,
 	}
 }
 
-func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+func (ms *MetricsService) GetJSONMetricValue(ctx context.Context, metric *models.Metrics) (*models.Metrics, error) {
 	if metric == nil {
 		return nil, models.ErrMetricNotFound
 	}
 
 	switch metric.MType {
 	case models.Gauge:
-		value, err := ms.reader.GetGauge(metric.ID)
+		value, err := ms.reader.GetGauge(ctx, metric.ID)
 		if err != nil {
 			return nil, err
 		}
 		metric.Value = &value
 		return metric, nil
 	case models.Counter:
-		delta, err := ms.reader.GetCounter(metric.ID)
+		delta, err := ms.reader.GetCounter(ctx, metric.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -124,10 +123,10 @@ func (ms *MetricsService) GetJSONMetricValue(metric *models.Metrics) (*models.Me
 	}
 }
 
-func (ms *MetricsService) GetAllMetrics() (map[string]string, error) {
+func (ms *MetricsService) GetAllMetrics(ctx context.Context) (map[string]string, error) {
 	list := make(map[string]string)
 
-	gauges, err := ms.reader.GetAllGauges()
+	gauges, err := ms.reader.GetAllGauges(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
@@ -135,7 +134,7 @@ func (ms *MetricsService) GetAllMetrics() (map[string]string, error) {
 		list[name] = strconv.FormatFloat(value, 'f', -1, 64)
 	}
 
-	counters, err := ms.reader.GetAllCounters()
+	counters, err := ms.reader.GetAllCounters(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}

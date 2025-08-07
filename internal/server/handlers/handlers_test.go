@@ -26,7 +26,7 @@ func initRouterForTests() http.Handler {
 	return r
 }
 
-func (m *mockUpdater) UpdateJSONMetrics(_ []models.Metrics) error {
+func (m *mockUpdater) UpdateJSONMetrics(_ context.Context, _ []models.Metrics) error {
 	return nil
 }
 
@@ -34,15 +34,15 @@ func (m *mockUpdater) PingCheck(_ context.Context) error {
 	return nil
 }
 
-func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
+func (m *mockUpdater) GetJSONMetricValue(_ context.Context, metric *models.Metrics) (*models.Metrics, error) {
 	return metric, nil
 }
 
-func (m *mockUpdater) UpdateJSONMetric(_ *models.Metrics) error {
+func (m *mockUpdater) UpdateJSONMetric(_ context.Context, _ *models.Metrics) error {
 	return nil
 }
 
-func (m *mockUpdater) UpdateMetricFromParams(mType, _, mValue string) error {
+func (m *mockUpdater) UpdateMetricFromParams(_ context.Context, mType, _, mValue string) error {
 	switch mType {
 	case "counter":
 		switch mValue {
@@ -71,7 +71,7 @@ func (m *mockUpdater) UpdateMetricFromParams(mType, _, mValue string) error {
 	}
 }
 
-func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
+func (m *mockUpdater) GetMetricValue(_ context.Context, mType, mName string) (string, error) {
 	if mName != "test" {
 		return "", models.ErrMetricNotFound
 	}
@@ -85,7 +85,7 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
-func (m *mockUpdater) GetAllMetrics() (map[string]string, error) {
+func (m *mockUpdater) GetAllMetrics(_ context.Context) (map[string]string, error) {
 	return map[string]string{
 		"test_counter": "42",
 		"test_gauge":   "3.14",

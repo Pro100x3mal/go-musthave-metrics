@@ -120,12 +120,12 @@ func (fs *FileStorage) restore() error {
 	for _, metric := range list {
 		switch metric.MType {
 		case models.Gauge:
-			err = fs.MemStorage.UpdateGauge(metric)
+			err = fs.MemStorage.UpdateGauge(nil, metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
 		case models.Counter:
-			err = fs.MemStorage.UpdateCounter(metric)
+			err = fs.MemStorage.UpdateCounter(nil, metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
@@ -184,8 +184,8 @@ func (fs *FileStorage) close() error {
 	return fs.file.Close()
 }
 
-func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
-	if err := fs.MemStorage.UpdateGauge(metric); err != nil {
+func (fs *FileStorage) UpdateGauge(ctx context.Context, metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateGauge(ctx, metric); err != nil {
 		return err
 	}
 
@@ -195,8 +195,8 @@ func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
 	return nil
 }
 
-func (fs *FileStorage) UpdateCounter(metric *models.Metrics) error {
-	if err := fs.MemStorage.UpdateCounter(metric); err != nil {
+func (fs *FileStorage) UpdateCounter(ctx context.Context, metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateCounter(ctx, metric); err != nil {
 		return err
 	}
 
@@ -206,8 +206,8 @@ func (fs *FileStorage) UpdateCounter(metric *models.Metrics) error {
 	return nil
 }
 
-func (fs *FileStorage) UpdateMetrics(metrics []models.Metrics) error {
-	if err := fs.MemStorage.UpdateMetrics(metrics); err != nil {
+func (fs *FileStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if err := fs.MemStorage.UpdateMetrics(ctx, metrics); err != nil {
 		return err
 	}
 
