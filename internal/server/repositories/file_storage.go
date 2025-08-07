@@ -120,12 +120,12 @@ func (fs *FileStorage) restore() error {
 	for _, metric := range list {
 		switch metric.MType {
 		case models.Gauge:
-			err = fs.MemStorage.UpdateGauge(nil, metric)
+			err = fs.MemStorage.UpdateGauge(context.Background(), metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
 		case models.Counter:
-			err = fs.MemStorage.UpdateCounter(nil, metric)
+			err = fs.MemStorage.UpdateCounter(context.Background(), metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
