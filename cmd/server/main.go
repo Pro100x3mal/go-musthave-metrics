@@ -39,20 +39,35 @@ func run() error {
 	}
 	defer logger.Sync()
 
+	var repo repositories.Repository
 	var wg sync.WaitGroup
 
-	ms := repositories.NewMemStorage()
-	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
-	if err != nil {
-		return err
+	switch {
+	case cfg.DatabaseDSN != "":
+		dbRepo, err := repositories.NewDB(ctx, cfg, logger)
+		if err != nil {
+			return err
+		}
+		defer dbRepo.Close()
+		repo = dbRepo
+	case cfg.FileStoragePath != "":
+		msRepo := repositories.NewMemStorage()
+		repo, err = repositories.NewFileStorage(ctx, cfg, msRepo, &wg, logger)
+		if err != nil {
+			return err
+		}
+	default:
+		logger.Info("initializing in-memory storage")
+		repo = repositories.NewMemStorage()
+		logger.Info("in-memory storage initialized successfully")
 	}
 
-	metricsService := services.NewMetricsService(repo)
-	metricsHandler := handlers.NewMetricsHandler(metricsService, logger)
+	service := services.NewMetricsService(repo)
+	handler := handlers.NewMetricsHandler(service, logger)
 
 	logger.Info("starting application")
 
-	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
+	if err = handler.StartServer(ctx, cfg); err != nil {
 		logger.Error("server failed", zap.Error(err))
 	}
 

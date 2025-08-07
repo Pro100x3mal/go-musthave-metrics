@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -70,7 +71,11 @@ func newMetricsProvider() *metricsProvider {
 	}
 }
 
-func (cs *MetricsCollectService) updateCollectMetrics() error {
+func (cs *MetricsCollectService) updateCollectMetrics(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+
 	runtime.ReadMemStats(cs.metrics.stats)
 
 	for name, fn := range cs.metrics.runtimeMetrics {
@@ -89,7 +94,11 @@ func (cs *MetricsCollectService) updateCollectMetrics() error {
 	return nil
 }
 
-func (cs *MetricsCollectService) updateRandomValue() error {
+func (cs *MetricsCollectService) updateRandomValue(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+
 	random := rand.Float64()
 	err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    randomValueMetric,
@@ -102,7 +111,11 @@ func (cs *MetricsCollectService) updateRandomValue() error {
 	return nil
 }
 
-func (cs *MetricsCollectService) updatePollCount() error {
+func (cs *MetricsCollectService) updatePollCount(ctx context.Context) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+
 	var pollCount int64 = 1
 	err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    pollCountMetric,
@@ -115,16 +128,16 @@ func (cs *MetricsCollectService) updatePollCount() error {
 	return nil
 }
 
-func (cs *MetricsCollectService) UpdateAllMetrics() error {
-	if err := cs.updateCollectMetrics(); err != nil {
+func (cs *MetricsCollectService) UpdateAllMetrics(ctx context.Context) error {
+	if err := cs.updateCollectMetrics(ctx); err != nil {
 		return err
 	}
 
-	if err := cs.updateRandomValue(); err != nil {
+	if err := cs.updateRandomValue(ctx); err != nil {
 		return err
 	}
 
-	if err := cs.updatePollCount(); err != nil {
+	if err := cs.updatePollCount(ctx); err != nil {
 		return err
 	}
 

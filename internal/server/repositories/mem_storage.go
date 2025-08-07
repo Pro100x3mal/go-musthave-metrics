@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -21,7 +22,7 @@ func NewMemStorage() *MemStorage {
 	}
 }
 
-func (m *MemStorage) UpdateGauge(metric *models.Metrics) error {
+func (m *MemStorage) UpdateGauge(_ context.Context, metric *models.Metrics) error {
 	if metric.Value == nil {
 		return errors.New("nil gauge value")
 	}
@@ -32,7 +33,7 @@ func (m *MemStorage) UpdateGauge(metric *models.Metrics) error {
 	return nil
 }
 
-func (m *MemStorage) UpdateCounter(metric *models.Metrics) error {
+func (m *MemStorage) UpdateCounter(_ context.Context, metric *models.Metrics) error {
 	if metric.Delta == nil {
 		return errors.New("nil counter delta")
 	}
@@ -43,7 +44,33 @@ func (m *MemStorage) UpdateCounter(metric *models.Metrics) error {
 	return nil
 }
 
-func (m *MemStorage) GetGauge(id string) (float64, error) {
+func (m *MemStorage) UpdateMetrics(_ context.Context, metrics []models.Metrics) error {
+	if metrics == nil {
+		return errors.New("no metrics provided: slice is nil")
+	}
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value == nil {
+				return errors.New("nil gauge value")
+			}
+			m.mu.Lock()
+			m.gauges[metric.ID] = *metric.Value
+			m.mu.Unlock()
+		case models.Counter:
+			if metric.Delta == nil {
+				return errors.New("nil counter delta")
+			}
+			m.mu.Lock()
+			m.counters[metric.ID] += *metric.Delta
+			m.mu.Unlock()
+		}
+	}
+
+	return nil
+}
+
+func (m *MemStorage) GetGauge(_ context.Context, id string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	v, exist := m.gauges[id]
@@ -53,7 +80,7 @@ func (m *MemStorage) GetGauge(id string) (float64, error) {
 	return v, nil
 }
 
-func (m *MemStorage) GetCounter(id string) (int64, error) {
+func (m *MemStorage) GetCounter(_ context.Context, id string) (int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	v, exist := m.counters[id]
@@ -63,14 +90,22 @@ func (m *MemStorage) GetCounter(id string) (int64, error) {
 	return v, nil
 }
 
-func (m *MemStorage) GetAllGauges() map[string]float64 {
+func (m *MemStorage) GetAllGauges(_ context.Context) (map[string]float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.gauges
+
+	if m.gauges == nil {
+		return nil, models.ErrMetricNotFound
+	}
+	return m.gauges, nil
 }
 
-func (m *MemStorage) GetAllCounters() map[string]int64 {
+func (m *MemStorage) GetAllCounters(_ context.Context) (map[string]int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.counters
+
+	if m.counters == nil {
+		return nil, models.ErrMetricNotFound
+	}
+	return m.counters, nil
 }

@@ -24,16 +24,18 @@ type FileStorage struct {
 }
 
 func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup, logger *zap.Logger) (*FileStorage, error) {
-	logger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
+	fsLogger := logger.With(zap.String("component", "file_storage"))
+	fsLogger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
+
 	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		logger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
+		fsLogger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
 		return nil, err
 	}
 
 	fs := &FileStorage{
 		MemStorage: ms,
-		logger:     logger,
+		logger:     fsLogger,
 		file:       file,
 		cfg:        cfg,
 		fileMutex:  &sync.Mutex{},
@@ -60,6 +62,7 @@ func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStora
 		}()
 	}
 
+	fs.logger.Info("file storage initialized successfully")
 	return fs, nil
 }
 
@@ -71,25 +74,25 @@ func (fs *FileStorage) runSaveByInterval(ctx context.Context, interval time.Dura
 	for {
 		select {
 		case <-ticker.C:
-			fs.logger.Info("running auto save loop")
-
+			fs.logger.Info("running auto save by interval")
 			fs.MemStorage.mu.RLock()
 			if err := fs.save(); err != nil {
 				fs.logger.Error("failed to save metrics to file", zap.Error(err))
 			}
 			fs.MemStorage.mu.RUnlock()
+			fs.logger.Info("metrics saved successfully")
 		case <-ctx.Done():
-			fs.logger.Info("stopping auto save loop")
-
+			fs.logger.Info("saving metrics on shutdown")
 			fs.MemStorage.mu.RLock()
 			if err := fs.save(); err != nil {
 				fs.logger.Error("failed to save metrics to file on shutdown", zap.Error(err))
 			}
 			fs.MemStorage.mu.RUnlock()
-
+			fs.logger.Info("metrics saved successfully on shutdown")
 			if err := fs.close(); err != nil {
 				fs.logger.Error("failed to close file storage", zap.Error(err))
 			}
+			fs.logger.Info("file storage closed successfully")
 			return
 		}
 	}
@@ -117,12 +120,12 @@ func (fs *FileStorage) restore() error {
 	for _, metric := range list {
 		switch metric.MType {
 		case models.Gauge:
-			err = fs.MemStorage.UpdateGauge(metric)
+			err = fs.MemStorage.UpdateGauge(context.Background(), metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
 		case models.Counter:
-			err = fs.MemStorage.UpdateCounter(metric)
+			err = fs.MemStorage.UpdateCounter(context.Background(), metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
@@ -181,8 +184,8 @@ func (fs *FileStorage) close() error {
 	return fs.file.Close()
 }
 
-func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
-	if err := fs.MemStorage.UpdateGauge(metric); err != nil {
+func (fs *FileStorage) UpdateGauge(ctx context.Context, metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateGauge(ctx, metric); err != nil {
 		return err
 	}
 
@@ -192,8 +195,19 @@ func (fs *FileStorage) UpdateGauge(metric *models.Metrics) error {
 	return nil
 }
 
-func (fs *FileStorage) UpdateCounter(metric *models.Metrics) error {
-	if err := fs.MemStorage.UpdateCounter(metric); err != nil {
+func (fs *FileStorage) UpdateCounter(ctx context.Context, metric *models.Metrics) error {
+	if err := fs.MemStorage.UpdateCounter(ctx, metric); err != nil {
+		return err
+	}
+
+	if fs.isSync {
+		return fs.save()
+	}
+	return nil
+}
+
+func (fs *FileStorage) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if err := fs.MemStorage.UpdateMetrics(ctx, metrics); err != nil {
 		return err
 	}
 

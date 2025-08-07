@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -49,20 +50,52 @@ func run() error {
 	defer tickerPoll.Stop()
 	defer tickerReport.Stop()
 
+	var wg sync.WaitGroup
+
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("shutting down gracefully...")
+			logger.Info("shutdown signal received, waiting for operations to complete...")
+			done := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(done)
+			}()
+
+			select {
+			case <-done:
+				logger.Info("all operations completed, shutting down gracefully")
+			case <-time.After(10 * time.Second):
+				logger.Warn("shutdown timed out, forcefully shutting down...")
+			}
+
 			return ctx.Err()
+
 		case <-tickerPoll.C:
-			if err = collectService.UpdateAllMetrics(); err != nil {
-				logger.Error("failed to update metrics", zap.Error(err))
+			if ctx.Err() != nil {
+				continue
 			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err = collectService.UpdateAllMetrics(ctx); err != nil {
+					logger.Error("failed to update metrics", zap.Error(err))
+				}
+			}()
+
 		case <-tickerReport.C:
-			queryService.SendMetrics(newClient)
-			if err = collectService.ResetPollCount(); err != nil {
-				logger.Error("failed to reset poll count", zap.Error(err))
+			if ctx.Err() != nil {
+				continue
 			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				queryService.SendMetrics(ctx, newClient)
+				if err = collectService.ResetPollCount(); err != nil {
+					logger.Error("failed to reset poll count", zap.Error(err))
+				}
+			}()
 		}
 	}
 }

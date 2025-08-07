@@ -24,7 +24,7 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := mh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
+	if err := mh.writer.UpdateMetricFromParams(r.Context(), mType, mName, mValue); err != nil {
 		switch {
 		case errors.Is(err, models.ErrInvalidMetricValue):
 			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
@@ -59,7 +59,37 @@ func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = mh.writer.UpdateJSONMetricFromParams(&metric)
+	err = mh.writer.UpdateJSONMetric(r.Context(), &metric)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (mh *MetricsHandler) UpdateBatchJSONHandler(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	var metrics []models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&metrics)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	for _, metric := range metrics {
+		if metric.ID == "" || metric.MType == "" {
+			http.Error(w, "Missing required metric fields", http.StatusBadRequest)
+			return
+		}
+	}
+
+	err = mh.writer.UpdateJSONMetrics(r.Context(), metrics)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -73,7 +103,7 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	mValue, err := mh.reader.GetMetricValue(mType, mName)
+	mValue, err := mh.reader.GetMetricValue(r.Context(), mType, mName)
 	if err != nil {
 		if errors.Is(err, models.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -111,7 +141,7 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respMetric, err := mh.reader.GetJSONMetricValue(&metric)
+	respMetric, err := mh.reader.GetJSONMetricValue(r.Context(), &metric)
 	if err != nil {
 		if errors.Is(err, models.ErrMetricNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -134,8 +164,17 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := mh.reader.GetAllMetrics()
+func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	list, err := mh.reader.GetAllMetrics(r.Context())
+	if err != nil {
+		if errors.Is(err, models.ErrMetricNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		mh.logger.Error("failed to get all metrics", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 
 	keys := make([]string, 0, len(list))
 	for name := range list {
@@ -153,10 +192,27 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, err := io.WriteString(w, builder.String())
+	_, err = io.WriteString(w, builder.String())
 	if err != nil {
 		mh.logger.Error("failed to write response", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
+	if mh.pinger == nil {
+		mh.logger.Error("database connection check functionality not implemented for current storage type")
+		http.Error(w, "Database connection check functionality not implemented for current storage type", http.StatusNotImplemented)
+		return
+	}
+
+	if err := mh.pinger.PingCheck(r.Context()); err != nil {
+		mh.logger.Error("database connection check failed", zap.Error(err))
+		http.Error(w, "Database connection check failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 }

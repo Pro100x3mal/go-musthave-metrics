@@ -1,0 +1,18 @@
+BEGIN TRANSACTION;
+
+CREATE TABLE IF NOT EXISTS gauges
+(
+    "id"  VARCHAR(255) UNIQUE NOT NULL PRIMARY KEY,
+    value DOUBLE PRECISION    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS counters
+(
+    "id"  VARCHAR(255) UNIQUE NOT NULL PRIMARY KEY,
+    delta BIGINT              NOT NULL
+);
+
+CREATE INDEX idx_gauges_id ON gauges (id);
+CREATE INDEX idx_counters_id ON counters (id);
+
+COMMIT;
