@@ -44,10 +44,10 @@ func GetConfig() (*ServerConfig, error) {
 		var err error
 		storeInterval, err = strconv.Atoi(envStoreInterval)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse STORE_INTERVAL value '%s' to integer: %w", envStoreInterval, err)
+			return nil, fmt.Errorf("failed to parse STORE_INTERVAL value %q to integer: %w", envStoreInterval, err)
 		}
 		if storeInterval < 0 {
-			return nil, fmt.Errorf("STORE_INTERVAL value '%s' must be greater than 0", envStoreInterval)
+			return nil, fmt.Errorf("STORE_INTERVAL value %q must be greater than 0", envStoreInterval)
 		}
 	}
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second
@@ -60,7 +60,7 @@ func GetConfig() (*ServerConfig, error) {
 		var err error
 		cfg.IsRestore, err = strconv.ParseBool(envIsRestore)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse RESTORE value '%s' to boolean: %w", envIsRestore, err)
+			return nil, fmt.Errorf("failed to parse RESTORE value %q to boolean: %w", envIsRestore, err)
 		}
 	}
 

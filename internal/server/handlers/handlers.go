@@ -209,7 +209,7 @@ func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) 
 
 	if err := mh.pinger.PingCheck(r.Context()); err != nil {
 		mh.logger.Error("database connection check failed", zap.Error(err))
-		http.Error(w, "Database connection check failed", http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 

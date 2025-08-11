@@ -38,7 +38,7 @@ func GetConfig() (*AgentConfig, error) {
 	if envPollSecStr, ok := os.LookupEnv("POLL_INTERVAL"); ok && envPollSecStr != "" {
 		envPollSecInt, err := strconv.Atoi(envPollSecStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse POLL_INTERVAL value '%s' to integer: %w", envPollSecStr, err)
+			return nil, fmt.Errorf("failed to parse POLL_INTERVAL value %q to integer: %w", envPollSecStr, err)
 		}
 		pollSec = envPollSecInt
 	}
@@ -46,7 +46,7 @@ func GetConfig() (*AgentConfig, error) {
 	if envReportSecStr, ok := os.LookupEnv("REPORT_INTERVAL"); ok && envReportSecStr != "" {
 		envReportSecInt, err := strconv.Atoi(envReportSecStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse REPORT_INTERVAL value '%s' to integer: %w", envReportSecStr, err)
+			return nil, fmt.Errorf("failed to parse REPORT_INTERVAL value %q to integer: %w", envReportSecStr, err)
 		}
 		reportSec = envReportSecInt
 	}

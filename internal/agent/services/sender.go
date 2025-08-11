@@ -5,12 +5,13 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/go-resty/resty/v2"
-	"go.uber.org/zap"
 )
 
 type RepositoryReader interface {
@@ -19,13 +20,11 @@ type RepositoryReader interface {
 
 type MetricsQueryService struct {
 	reader RepositoryReader
-	logger *zap.Logger
 }
 
-func NewMetricsQueryService(reader RepositoryReader, logger *zap.Logger) *MetricsQueryService {
+func NewMetricsQueryService(reader RepositoryReader) *MetricsQueryService {
 	return &MetricsQueryService{
 		reader: reader,
-		logger: logger,
 	}
 }
 
@@ -44,23 +43,20 @@ func NewClient(cfg *configs.AgentConfig) *Client {
 	}
 }
 
-func (qs *MetricsQueryService) SendMetrics(ctx context.Context, c *Client) {
+func (qs *MetricsQueryService) SendMetrics(ctx context.Context, c *Client) error {
 	metrics := qs.reader.GetAllMetrics()
 	if len(metrics) == 0 {
-		qs.logger.Info("no metrics to send")
-		return
+		return errors.New("no metrics to send")
 	}
 
 	buf := &bytes.Buffer{}
 	gz := gzip.NewWriter(buf)
 	err := json.NewEncoder(gz).Encode(metrics)
 	if err != nil {
-		qs.logger.Error("gzip encoding failed", zap.Error(err))
-		return
+		return fmt.Errorf("gzip encoding failed: %w", err)
 	}
 	if err = gz.Close(); err != nil {
-		qs.logger.Error("failed to close gzip writer", zap.Error(err))
-		return
+		return fmt.Errorf("failed to close gzip writer: %w", err)
 	}
 
 	_, err = c.client.R().
@@ -71,13 +67,11 @@ func (qs *MetricsQueryService) SendMetrics(ctx context.Context, c *Client) {
 		Post("/updates/")
 
 	if err != nil {
-		if ctx.Err() != nil {
-			qs.logger.Info("request cancelled due to shutdown")
-			return
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
 		}
-
-		qs.logger.Error("failed to send metrics", zap.Error(err))
+		return fmt.Errorf("failed to send metrics: %w", err)
 	}
 
-	qs.logger.Info("all metrics was sent succesfully")
+	return nil
 }

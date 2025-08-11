@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/signal"
 	"sync"
@@ -41,14 +42,12 @@ func run() error {
 
 	repo := repositories.NewMemStorage()
 	collectService := services.NewMetricsCollectService(repo)
-	queryService := services.NewMetricsQueryService(repo, logger)
+	queryService := services.NewMetricsQueryService(repo)
 
 	newClient := services.NewClient(cfg)
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
-	defer tickerPoll.Stop()
-	defer tickerReport.Stop()
 
 	var wg sync.WaitGroup
 
@@ -56,43 +55,42 @@ func run() error {
 		select {
 		case <-ctx.Done():
 			logger.Info("shutdown signal received, waiting for operations to complete...")
-			done := make(chan struct{})
-			go func() {
-				wg.Wait()
-				close(done)
-			}()
+			tickerPoll.Stop()
+			tickerReport.Stop()
 
-			select {
-			case <-done:
-				logger.Info("all operations completed, shutting down gracefully")
-			case <-time.After(10 * time.Second):
-				logger.Warn("shutdown timed out, forcefully shutting down...")
-			}
-
+			wg.Wait()
+			logger.Info("all operations completed, shutting down gracefully")
 			return ctx.Err()
 
 		case <-tickerPoll.C:
-			if ctx.Err() != nil {
-				continue
-			}
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if err = collectService.UpdateAllMetrics(ctx); err != nil {
+				if err := collectService.UpdateAllMetrics(ctx); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						logger.Debug("request cancelled")
+						return
+					}
 					logger.Error("failed to update metrics", zap.Error(err))
+					return
 				}
 			}()
 
 		case <-tickerReport.C:
-			if ctx.Err() != nil {
-				continue
-			}
-
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				queryService.SendMetrics(ctx, newClient)
-				if err = collectService.ResetPollCount(); err != nil {
+
+				if err := queryService.SendMetrics(ctx, newClient); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						logger.Debug("request cancelled")
+						return
+					}
+					logger.Error("failed to send metrics", zap.Error(err))
+					return
+				}
+
+				if err := collectService.ResetPollCount(); err != nil {
 					logger.Error("failed to reset poll count", zap.Error(err))
 				}
 			}()
