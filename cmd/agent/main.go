@@ -60,7 +60,7 @@ func run() error {
 
 			wg.Wait()
 			logger.Info("all operations completed, shutting down gracefully")
-			return ctx.Err()
+			return nil
 
 		case <-tickerPoll.C:
 			wg.Add(1)
@@ -89,6 +89,7 @@ func run() error {
 					logger.Error("failed to send metrics", zap.Error(err))
 					return
 				}
+				logger.Info("metrics sent successfully")
 
 				if err := collectService.ResetPollCount(); err != nil {
 					logger.Error("failed to reset poll count", zap.Error(err))

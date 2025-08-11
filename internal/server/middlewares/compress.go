@@ -15,7 +15,7 @@ type CompressHandler struct {
 
 func NewCompressHandler(logger *zap.Logger) *CompressHandler {
 	return &CompressHandler{
-		logger: logger.With(zap.String("middleware", "http_compress")),
+		logger: logger,
 	}
 }
 
@@ -133,5 +133,4 @@ func (ch *CompressHandler) Middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(wOut, r)
 	})
-
 }

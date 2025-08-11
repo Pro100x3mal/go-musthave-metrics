@@ -13,7 +13,7 @@ type LoggerHandler struct {
 
 func NewLoggerHandler(logger *zap.Logger) *LoggerHandler {
 	return &LoggerHandler{
-		logger: logger.With(zap.String("middleware", "http_logger")),
+		logger: logger,
 	}
 }
 
@@ -75,5 +75,4 @@ func (lh *LoggerHandler) Middleware(next http.Handler) http.Handler {
 			zap.Duration("duration", duration),
 		)
 	})
-
 }

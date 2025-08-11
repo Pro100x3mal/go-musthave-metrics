@@ -31,26 +31,23 @@ type DB struct {
 }
 
 func NewDB(ctx context.Context, cfg *configs.ServerConfig, logger *zap.Logger) (*DB, error) {
-	dbLogger := logger.With(zap.String("component", "db"))
-	dbLogger.Info("initializing database storage", zap.String("dsn", cfg.DatabaseDSN))
+	logger.Info("initializing database storage", zap.String("dsn", cfg.DatabaseDSN))
 
-	dbLogger.Info("running database migrations")
+	logger.Debug("running database migrations")
 	err := runMigrations(cfg)
 	if err != nil {
-		dbLogger.Error("failed to run database migrations", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to run database migrations: %w", err)
 	}
-	dbLogger.Info("database migrations completed")
+	logger.Debug("database migrations completed")
 
-	dbLogger.Info("connecting to database")
+	logger.Debug("connecting to database")
 	pool, err := initPool(ctx, cfg)
 	if err != nil {
-		dbLogger.Error("failed to connect to database", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-	dbLogger.Info("connected to database")
+	logger.Debug("connected to database")
 
-	dbLogger.Info("database storage initialized successfully")
+	logger.Info("database storage initialized successfully")
 
 	return &DB{
 		pool: pool,

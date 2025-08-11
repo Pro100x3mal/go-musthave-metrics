@@ -30,7 +30,7 @@ func run() error {
 
 	cfg, err := configs.GetConfig()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get config: %w", err)
 	}
 
 	logger, err := infrastructure.NewLogger(cfg)
@@ -39,39 +39,47 @@ func run() error {
 	}
 	defer logger.Sync()
 
+	mainLogger := logger.Named("main")
+	srvLogger := logger.Named("server")
+
+	mainLogger.Info("starting application")
+
 	var repo repositories.Repository
 	var wg sync.WaitGroup
 
 	switch {
 	case cfg.DatabaseDSN != "":
-		dbRepo, err := repositories.NewDB(ctx, cfg, logger)
+		dbLogger := logger.Named("database")
+		dbRepo, err := repositories.NewDB(ctx, cfg, dbLogger)
 		if err != nil {
+			dbLogger.Error("failed to initialize database storage", zap.Error(err))
 			return err
 		}
 		defer dbRepo.Close()
 		repo = dbRepo
 	case cfg.FileStoragePath != "":
+		fsLogger := logger.Named("file_storage")
 		msRepo := repositories.NewMemStorage()
-		repo, err = repositories.NewFileStorage(ctx, cfg, msRepo, &wg, logger)
+		repo, err = repositories.NewFileStorage(ctx, cfg, msRepo, &wg, fsLogger)
 		if err != nil {
+			fsLogger.Error("failed to initialize file storage", zap.Error(err))
 			return err
 		}
 	default:
-		logger.Info("initializing in-memory storage")
+		msLogger := logger.Named("memory_storage")
+		msLogger.Info("initializing in-memory storage")
 		repo = repositories.NewMemStorage()
-		logger.Info("in-memory storage initialized successfully")
+		msLogger.Info("in-memory storage initialized successfully")
 	}
 
 	service := services.NewMetricsService(repo)
-	handler := handlers.NewMetricsHandler(service, logger)
-
-	logger.Info("starting application")
+	handler := handlers.NewMetricsHandler(service, srvLogger)
 
 	if err = handler.StartServer(ctx, cfg); err != nil {
-		logger.Error("server failed", zap.Error(err))
+		srvLogger.Error("server failed", zap.Error(err))
 	}
 
 	wg.Wait()
-	logger.Info("application stopped gracefully")
+	mainLogger.Info("application stopped gracefully")
 	return err
 }

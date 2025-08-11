@@ -24,34 +24,29 @@ type FileStorage struct {
 }
 
 func NewFileStorage(ctx context.Context, cfg *configs.ServerConfig, ms *MemStorage, wg *sync.WaitGroup, logger *zap.Logger) (*FileStorage, error) {
-	fsLogger := logger.With(zap.String("component", "file_storage"))
-	fsLogger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
+	logger.Info("initializing file storage", zap.String("path", cfg.FileStoragePath))
 
 	file, err := os.OpenFile(cfg.FileStoragePath, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		fsLogger.Error("error opening storage file", zap.String("path", cfg.FileStoragePath), zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("failed to open file %q: %w", cfg.FileStoragePath, err)
 	}
 
 	fs := &FileStorage{
 		MemStorage: ms,
-		logger:     fsLogger,
+		logger:     logger,
 		file:       file,
 		cfg:        cfg,
 		fileMutex:  &sync.Mutex{},
+		isSync:     cfg.StoreInterval == 0,
 	}
 
 	if cfg.IsRestore {
-		fs.logger.Info("restoring metrics from file", zap.String("path", cfg.FileStoragePath))
+		fs.logger.Debug("restoring metrics from file", zap.String("path", cfg.FileStoragePath))
 		if err = fs.restore(); err != nil {
-			fs.logger.Error("failed to restore metrics from file", zap.Error(err))
-			return nil, err
+			_ = file.Close()
+			return nil, fmt.Errorf("failed to restore metrics from file: %w", err)
 		}
-		fs.logger.Info("metrics restored successfully")
-	}
-
-	if cfg.StoreInterval == 0 {
-		fs.isSync = true
+		fs.logger.Debug("metrics restored successfully")
 	}
 
 	if cfg.StoreInterval > 0 {
@@ -117,15 +112,16 @@ func (fs *FileStorage) restore() error {
 		return fmt.Errorf("failed to decode metrics JSON from file %q: %w", fs.file.Name(), err)
 	}
 
+	ctx := context.Background()
 	for _, metric := range list {
 		switch metric.MType {
 		case models.Gauge:
-			err = fs.MemStorage.UpdateGauge(context.Background(), metric)
+			err = fs.MemStorage.UpdateGauge(ctx, metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}
 		case models.Counter:
-			err = fs.MemStorage.UpdateCounter(context.Background(), metric)
+			err = fs.MemStorage.UpdateCounter(ctx, metric)
 			if err != nil {
 				return fmt.Errorf("failed to update %s metric %q: %w", metric.MType, metric.ID, err)
 			}

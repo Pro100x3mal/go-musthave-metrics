@@ -45,7 +45,7 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *Met
 	mh := &MetricsHandler{
 		reader: service,
 		writer: service,
-		logger: logger.With(zap.String("component", "metrics_handler")),
+		logger: logger,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {
