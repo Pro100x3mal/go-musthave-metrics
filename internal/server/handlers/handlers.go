@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,15 +26,7 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := mh.writer.UpdateMetricFromParams(r.Context(), mType, mName, mValue); err != nil {
-		switch {
-		case errors.Is(err, models.ErrInvalidMetricValue):
-			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
-		case errors.Is(err, models.ErrUnsupportedMetricType):
-			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
-		default:
-			mh.logger.Error("failed to update metric", zap.Error(err))
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+		mh.writeError(w, err, "failed to update metric")
 		return
 	}
 
@@ -61,7 +54,7 @@ func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Reque
 
 	err = mh.writer.UpdateJSONMetric(r.Context(), &metric)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to update metric")
 		return
 	}
 
@@ -91,7 +84,7 @@ func (mh *MetricsHandler) UpdateBatchJSONHandler(w http.ResponseWriter, r *http.
 
 	err = mh.writer.UpdateJSONMetrics(r.Context(), metrics)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to update metrics")
 		return
 	}
 
@@ -105,11 +98,7 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 
 	mValue, err := mh.reader.GetMetricValue(r.Context(), mType, mName)
 	if err != nil {
-		if errors.Is(err, models.ErrMetricNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to get metric")
 		return
 	}
 
@@ -143,15 +132,7 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 
 	respMetric, err := mh.reader.GetJSONMetricValue(r.Context(), &metric)
 	if err != nil {
-		if errors.Is(err, models.ErrMetricNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, models.ErrUnsupportedMetricType) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to get metric")
 		return
 	}
 
@@ -167,12 +148,7 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	list, err := mh.reader.GetAllMetrics(r.Context())
 	if err != nil {
-		if errors.Is(err, models.ErrMetricNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		mh.logger.Error("failed to get all metrics", zap.Error(err))
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		mh.writeError(w, err, "failed to get metrics")
 		return
 	}
 
@@ -215,4 +191,33 @@ func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
+}
+
+func (mh *MetricsHandler) writeError(w http.ResponseWriter, err error, internalErrorMessage string) {
+	switch {
+	case errors.Is(err, context.Canceled):
+		mh.logger.Debug("request canceled by client")
+		return
+
+	case errors.Is(err, context.DeadlineExceeded):
+		http.Error(w, http.StatusText(http.StatusGatewayTimeout), http.StatusGatewayTimeout)
+		return
+
+	case errors.Is(err, models.ErrUnsupportedMetricType):
+		http.Error(w, models.ErrUnsupportedMetricType.Error(), http.StatusBadRequest)
+		return
+
+	case errors.Is(err, models.ErrInvalidMetricValue):
+		http.Error(w, models.ErrInvalidMetricValue.Error(), http.StatusBadRequest)
+		return
+
+	case errors.Is(err, models.ErrMetricNotFound):
+		http.Error(w, models.ErrMetricNotFound.Error(), http.StatusNotFound)
+		return
+
+	default:
+		mh.logger.Error(internalErrorMessage, zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 }

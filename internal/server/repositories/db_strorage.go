@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
@@ -15,14 +14,12 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
 type DB struct {
-	pool           *pgxpool.Pool
-	retryIntervals []time.Duration
+	pool *pgxpool.Pool
 }
 
 func NewDB(ctx context.Context, cfg *configs.ServerConfig, logger *zap.Logger) (*DB, error) {
@@ -44,15 +41,8 @@ func NewDB(ctx context.Context, cfg *configs.ServerConfig, logger *zap.Logger) (
 
 	logger.Info("database storage initialized successfully")
 
-	defaultRetryIntervals := []time.Duration{
-		1 * time.Second,
-		3 * time.Second,
-		5 * time.Second,
-	}
-
 	return &DB{
-		pool:           pool,
-		retryIntervals: defaultRetryIntervals,
+		pool: pool,
 	}, nil
 }
 
@@ -106,28 +96,6 @@ func (db *DB) Ping(ctx context.Context) error {
 	return nil
 }
 
-func isRetryableDBError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		code := pgErr.Code
-		switch code {
-		case "08000", "08003", "08006", "08001", "08004":
-			return true
-		case "57014", "57P01", "57P02", "57P03":
-			return true
-		case "40001", "40P01":
-			return true
-		default:
-			return false
-		}
-	}
-	return false
-}
-
 func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
 	if metrics == nil {
 		return errors.New("no metrics provided: slice is nil")
@@ -173,8 +141,6 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	}
 	defer tx.Rollback(ctx)
 
-	maxRetries := len(db.retryIntervals) + 1
-
 	if len(gauges) > 0 {
 		var qb strings.Builder
 		qb.WriteString("INSERT INTO gauges (id, value) VALUES ")
@@ -189,26 +155,12 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 		}
 		qb.WriteString(" ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value")
 
-		var lastErr error
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			_, err = tx.Exec(ctx, qb.String(), args...)
-			cancel()
-
-			if err == nil {
-				lastErr = nil
-				break
+		_, err = tx.Exec(ctx, qb.String(), args...)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return err
 			}
-			lastErr = err
-			if !isRetryableDBError(err) {
-				return fmt.Errorf("failed to update gauge batch: %w", err)
-			}
-			if attempt < maxRetries-1 {
-				time.Sleep(db.retryIntervals[attempt])
-			}
-		}
-		if lastErr != nil {
-			return fmt.Errorf("failed to update gauge batch after retries: %w", lastErr)
+			return fmt.Errorf("failed to insert gauge batch: %w", err)
 		}
 	}
 
@@ -226,32 +178,19 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 		}
 		qb.WriteString(" ON CONFLICT (id) DO UPDATE SET delta = counters.delta + EXCLUDED.delta")
 
-		var lastErr error
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			_, err = tx.Exec(ctx, qb.String(), args...)
-			cancel()
-
-			if err == nil {
-				lastErr = nil
-				break
+		_, err = tx.Exec(ctx, qb.String(), args...)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				return err
 			}
-			lastErr = err
-			if !isRetryableDBError(err) {
-				return fmt.Errorf("failed to update counter batch: %w", err)
-			}
-			if attempt < maxRetries-1 {
-				time.Sleep(db.retryIntervals[attempt])
-			}
-		}
-		if lastErr != nil {
-			return fmt.Errorf("failed to update counter batch after retries: %w", lastErr)
+			return fmt.Errorf("failed to insert counter batch: %w", err)
 		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
+
 	return nil
 }
 
@@ -267,28 +206,16 @@ func (db *DB) UpdateGauge(ctx context.Context, metric *models.Metrics) error {
 		SET value = $2
     `
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
+	_, err := db.pool.Exec(ctx, query, metric.ID, *metric.Value)
 
-		_, err := db.pool.Exec(ctxRetry, query, metric.ID, *metric.Value)
-		cancelRetry()
-
-		if err == nil {
-			return nil
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return err
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return fmt.Errorf("database error: failed to insert gauge metric: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return fmt.Errorf("database error: failed to insert gauge metric: %w", err)
 	}
-	return fmt.Errorf("database error: failed to insert gauge metric after retries: %w", lastErr)
+
+	return nil
 }
 
 func (db *DB) UpdateCounter(ctx context.Context, metric *models.Metrics) error {
@@ -303,28 +230,16 @@ func (db *DB) UpdateCounter(ctx context.Context, metric *models.Metrics) error {
 		SET delta = counters.delta + $2
     `
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
+	_, err := db.pool.Exec(ctx, query, metric.ID, *metric.Delta)
 
-		_, err := db.pool.Exec(ctxRetry, query, metric.ID, *metric.Delta)
-		cancelRetry()
-
-		if err == nil {
-			return nil
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return err
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return fmt.Errorf("database error: failed to insert counter metric: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return fmt.Errorf("database error: failed to insert counter metric: %w", err)
 	}
-	return fmt.Errorf("database error: failed to insert counter metric after retries: %w", lastErr)
+
+	return nil
 }
 
 func (db *DB) GetGauge(ctx context.Context, id string) (float64, error) {
@@ -332,34 +247,21 @@ func (db *DB) GetGauge(ctx context.Context, id string) (float64, error) {
 		SELECT value FROM gauges WHERE id = $1
 	`
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
+	row := db.pool.QueryRow(ctx, query, id)
+	var value float64
+	err := row.Scan(&value)
 
-		row := db.pool.QueryRow(ctxRetry, query, id)
-		var v float64
-		err := row.Scan(&v)
-		cancelRetry()
-
-		if err == nil {
-			return v, nil
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return 0, err
 		}
-
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, models.ErrMetricNotFound
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return 0, fmt.Errorf("database error: failed to get gauge metric: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return 0, fmt.Errorf("database error: failed to get gauge metric: %w", err)
 	}
-	return 0, fmt.Errorf("database error: failed to get gauge metric after retries: %w", lastErr)
+
+	return value, nil
 }
 
 func (db *DB) GetCounter(ctx context.Context, id string) (int64, error) {
@@ -367,34 +269,21 @@ func (db *DB) GetCounter(ctx context.Context, id string) (int64, error) {
 		SELECT delta FROM counters WHERE id = $1
 	`
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
+	row := db.pool.QueryRow(ctx, query, id)
+	var delta int64
+	err := row.Scan(&delta)
 
-		row := db.pool.QueryRow(ctxRetry, query, id)
-		var v int64
-		err := row.Scan(&v)
-		cancelRetry()
-
-		if err == nil {
-			return v, nil
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return 0, err
 		}
-
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, models.ErrMetricNotFound
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return 0, fmt.Errorf("database error: failed to get counter metric: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return 0, fmt.Errorf("database error: failed to get counter metric: %w", err)
 	}
-	return 0, fmt.Errorf("database error: failed to get counter metric after retries: %w", lastErr)
+
+	return delta, nil
 }
 
 func (db *DB) GetAllGauges(ctx context.Context) (map[string]float64, error) {
@@ -402,49 +291,35 @@ func (db *DB) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 		SELECT id, value FROM gauges
 	`
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
-
-		rows, err := db.pool.Query(ctxRetry, query)
-		cancelRetry()
-
-		if err == nil {
-			m := make(map[string]float64)
-			for rows.Next() {
-				var id string
-				var value float64
-
-				if err = rows.Scan(&id, &value); err != nil {
-					return nil, fmt.Errorf("failed to scan gauge metrics values from database: %w", err)
-				}
-				m[id] = value
-			}
-
-			if err = rows.Err(); err != nil {
-				return nil, fmt.Errorf("error occurred while iterating over gauge metrics: %w", err)
-			}
-
-			rows.Close()
-
-			if len(m) == 0 {
-				return nil, models.ErrMetricNotFound
-			}
-
-			return m, nil
+	rows, err := db.pool.Query(ctx, query)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return nil, err
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return nil, fmt.Errorf("failed to execute query to get all gauge metrics: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return nil, fmt.Errorf("database error: failed to execute query to get all gauge metrics: %w", err)
 	}
-	return nil, fmt.Errorf("failed to get all gauge metrics after retries: %w", lastErr)
+	defer rows.Close()
+
+	m := make(map[string]float64)
+	for rows.Next() {
+		var id string
+		var value float64
+
+		if err = rows.Scan(&id, &value); err != nil {
+			return nil, fmt.Errorf("database error: failed to scan gauge metrics values from database: %w", err)
+		}
+		m[id] = value
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("database error: error occurred while iterating over gauge metrics: %w", err)
+	}
+
+	if len(m) == 0 {
+		return nil, models.ErrMetricNotFound
+	}
+
+	return m, nil
 }
 
 func (db *DB) GetAllCounters(ctx context.Context) (map[string]int64, error) {
@@ -452,47 +327,33 @@ func (db *DB) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 		SELECT id, delta FROM counters
 	`
 
-	maxRetries := len(db.retryIntervals) + 1
-	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		ctxRetry, cancelRetry := context.WithTimeout(ctx, 3*time.Second)
-
-		rows, err := db.pool.Query(ctxRetry, query)
-		cancelRetry()
-
-		if err == nil {
-			m := make(map[string]int64)
-			for rows.Next() {
-				var id string
-				var delta int64
-
-				if err = rows.Scan(&id, &delta); err != nil {
-					return nil, fmt.Errorf("failed to scan counter metrics values from database: %w", err)
-				}
-				m[id] = delta
-			}
-
-			if err = rows.Err(); err != nil {
-				return nil, fmt.Errorf("error occurred while iterating over counter metrics: %w", err)
-			}
-
-			rows.Close()
-
-			if len(m) == 0 {
-				return nil, models.ErrMetricNotFound
-			}
-
-			return m, nil
+	rows, err := db.pool.Query(ctx, query)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return nil, err
 		}
-
-		lastErr = err
-		if !isRetryableDBError(err) {
-			return nil, fmt.Errorf("failed to execute query to get all counter metrics: %w", err)
-		}
-
-		if attempt < maxRetries-1 {
-			time.Sleep(db.retryIntervals[attempt])
-		}
+		return nil, fmt.Errorf("database error: failed to execute query to get all counter metrics: %w", err)
 	}
-	return nil, fmt.Errorf("failed to get all counter metrics after retries: %w", lastErr)
+	defer rows.Close()
+
+	m := make(map[string]int64)
+	for rows.Next() {
+		var id string
+		var delta int64
+
+		if err = rows.Scan(&id, &delta); err != nil {
+			return nil, fmt.Errorf("database error: failed to scan counter metrics values from database: %w", err)
+		}
+		m[id] = delta
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("database error: error occurred while iterating over counter metrics: %w", err)
+	}
+
+	if len(m) == 0 {
+		return nil, models.ErrMetricNotFound
+	}
+
+	return m, nil
 }

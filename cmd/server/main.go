@@ -6,11 +6,13 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories/retry"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"go.uber.org/zap"
 )
@@ -56,7 +58,7 @@ func run() error {
 			return err
 		}
 		defer dbRepo.Close()
-		repo = dbRepo
+		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, time.Second)
 	case cfg.FileStoragePath != "":
 		fsLogger := logger.Named("file_storage")
 		msRepo := repositories.NewMemStorage()
