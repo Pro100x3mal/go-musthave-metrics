@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,16 +25,8 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := mh.writer.UpdateMetricFromParams(mType, mName, mValue); err != nil {
-		switch {
-		case errors.Is(err, models.ErrInvalidMetricValue):
-			http.Error(w, "Invalid Metric Value", http.StatusBadRequest)
-		case errors.Is(err, models.ErrUnsupportedMetricType):
-			http.Error(w, "Unsupported Metric Type", http.StatusBadRequest)
-		default:
-			mh.logger.Error("failed to update metric", zap.Error(err))
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+	if err := mh.writer.UpdateMetricFromParams(r.Context(), mType, mName, mValue); err != nil {
+		mh.writeError(w, err, "failed to update metric")
 		return
 	}
 
@@ -59,9 +52,39 @@ func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	err = mh.writer.UpdateJSONMetricFromParams(&metric)
+	err = mh.writer.UpdateJSONMetric(r.Context(), &metric)
+	if err != nil {
+		mh.writeError(w, err, "failed to update metric")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (mh *MetricsHandler) UpdateBatchJSONHandler(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Invalid Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	var metrics []models.Metrics
+	err := json.NewDecoder(r.Body).Decode(&metrics)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	for _, metric := range metrics {
+		if metric.ID == "" || metric.MType == "" {
+			http.Error(w, "Missing required metric fields", http.StatusBadRequest)
+			return
+		}
+	}
+
+	err = mh.writer.UpdateJSONMetrics(r.Context(), metrics)
+	if err != nil {
+		mh.writeError(w, err, "failed to update metrics")
 		return
 	}
 
@@ -73,13 +96,9 @@ func (mh *MetricsHandler) GetMetricHandler(w http.ResponseWriter, r *http.Reques
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 
-	mValue, err := mh.reader.GetMetricValue(mType, mName)
+	mValue, err := mh.reader.GetMetricValue(r.Context(), mType, mName)
 	if err != nil {
-		if errors.Is(err, models.ErrMetricNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to get metric")
 		return
 	}
 
@@ -111,17 +130,9 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respMetric, err := mh.reader.GetJSONMetricValue(&metric)
+	respMetric, err := mh.reader.GetJSONMetricValue(r.Context(), &metric)
 	if err != nil {
-		if errors.Is(err, models.ErrMetricNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, models.ErrUnsupportedMetricType) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		mh.writeError(w, err, "failed to get metric")
 		return
 	}
 
@@ -134,8 +145,12 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.Request) {
-	list := mh.reader.GetAllMetrics()
+func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	list, err := mh.reader.GetAllMetrics(r.Context())
+	if err != nil {
+		mh.writeError(w, err, "failed to get metrics")
+		return
+	}
 
 	keys := make([]string, 0, len(list))
 	for name := range list {
@@ -153,9 +168,55 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, _ *http.R
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, err := io.WriteString(w, builder.String())
+	_, err = io.WriteString(w, builder.String())
 	if err != nil {
 		mh.logger.Error("failed to write response", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (mh *MetricsHandler) PingDBHandler(w http.ResponseWriter, r *http.Request) {
+	if mh.pinger == nil {
+		mh.logger.Error("database connection check functionality not implemented for current storage type")
+		http.Error(w, "Database connection check functionality not implemented for current storage type", http.StatusNotImplemented)
+		return
+	}
+
+	if err := mh.pinger.PingCheck(r.Context()); err != nil {
+		mh.logger.Error("database connection check failed", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (mh *MetricsHandler) writeError(w http.ResponseWriter, err error, internalErrorMessage string) {
+	switch {
+	case errors.Is(err, context.Canceled):
+		mh.logger.Debug("request canceled by client")
+		return
+
+	case errors.Is(err, context.DeadlineExceeded):
+		http.Error(w, http.StatusText(http.StatusGatewayTimeout), http.StatusGatewayTimeout)
+		return
+
+	case errors.Is(err, models.ErrUnsupportedMetricType):
+		http.Error(w, models.ErrUnsupportedMetricType.Error(), http.StatusBadRequest)
+		return
+
+	case errors.Is(err, models.ErrInvalidMetricValue):
+		http.Error(w, models.ErrInvalidMetricValue.Error(), http.StatusBadRequest)
+		return
+
+	case errors.Is(err, models.ErrMetricNotFound):
+		http.Error(w, models.ErrMetricNotFound.Error(), http.StatusNotFound)
+		return
+
+	default:
+		mh.logger.Error(internalErrorMessage, zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

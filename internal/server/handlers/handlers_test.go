@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,24 +17,32 @@ import (
 type mockUpdater struct{}
 
 func initRouterForTests() http.Handler {
-	mock := &mockUpdater{}
+	mockUpd := &mockUpdater{}
 	zl := zap.NewNop()
-	handler := NewMetricsHandler(mock, zl)
+	handler := NewMetricsHandler(mockUpd, zl)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)
 	return r
 }
 
-func (m *mockUpdater) GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error) {
-	return metric, nil
-}
-
-func (m *mockUpdater) UpdateJSONMetricFromParams(metric *models.Metrics) error {
+func (m *mockUpdater) UpdateJSONMetrics(_ context.Context, _ []models.Metrics) error {
 	return nil
 }
 
-func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error {
+func (m *mockUpdater) PingCheck(_ context.Context) error {
+	return nil
+}
+
+func (m *mockUpdater) GetJSONMetricValue(_ context.Context, metric *models.Metrics) (*models.Metrics, error) {
+	return metric, nil
+}
+
+func (m *mockUpdater) UpdateJSONMetric(_ context.Context, _ *models.Metrics) error {
+	return nil
+}
+
+func (m *mockUpdater) UpdateMetricFromParams(_ context.Context, mType, _, mValue string) error {
 	switch mType {
 	case "counter":
 		switch mValue {
@@ -62,7 +71,7 @@ func (m *mockUpdater) UpdateMetricFromParams(mType, mName, mValue string) error 
 	}
 }
 
-func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
+func (m *mockUpdater) GetMetricValue(_ context.Context, mType, mName string) (string, error) {
 	if mName != "test" {
 		return "", models.ErrMetricNotFound
 	}
@@ -76,11 +85,11 @@ func (m *mockUpdater) GetMetricValue(mType, mName string) (string, error) {
 	}
 }
 
-func (m *mockUpdater) GetAllMetrics() map[string]string {
+func (m *mockUpdater) GetAllMetrics(_ context.Context) (map[string]string, error) {
 	return map[string]string{
 		"test_counter": "42",
 		"test_gauge":   "3.14",
-	}
+	}, nil
 }
 
 func TestUpdateMetricsHandler(t *testing.T) {

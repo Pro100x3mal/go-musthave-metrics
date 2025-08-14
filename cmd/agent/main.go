@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -40,29 +42,59 @@ func run() error {
 
 	repo := repositories.NewMemStorage()
 	collectService := services.NewMetricsCollectService(repo)
-	queryService := services.NewMetricsQueryService(repo, logger)
+	queryService := services.NewMetricsQueryService(repo)
 
 	newClient := services.NewClient(cfg)
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
-	defer tickerPoll.Stop()
-	defer tickerReport.Stop()
+
+	var wg sync.WaitGroup
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("shutting down gracefully...")
-			return ctx.Err()
+			logger.Info("shutdown signal received, waiting for operations to complete...")
+			tickerPoll.Stop()
+			tickerReport.Stop()
+
+			wg.Wait()
+			logger.Info("all operations completed, shutting down gracefully")
+			return nil
+
 		case <-tickerPoll.C:
-			if err = collectService.UpdateAllMetrics(); err != nil {
-				logger.Error("failed to update metrics", zap.Error(err))
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := collectService.UpdateAllMetrics(ctx); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						logger.Debug("request cancelled")
+						return
+					}
+					logger.Error("failed to update metrics", zap.Error(err))
+					return
+				}
+			}()
+
 		case <-tickerReport.C:
-			queryService.SendMetrics(newClient)
-			if err = collectService.ResetPollCount(); err != nil {
-				logger.Error("failed to reset poll count", zap.Error(err))
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				if err := queryService.SendMetrics(ctx, newClient); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						logger.Debug("request cancelled")
+						return
+					}
+					logger.Error("failed to send metrics", zap.Error(err))
+					return
+				}
+				logger.Info("metrics sent successfully")
+
+				if err := collectService.ResetPollCount(); err != nil {
+					logger.Error("failed to reset poll count", zap.Error(err))
+				}
+			}()
 		}
 	}
 }

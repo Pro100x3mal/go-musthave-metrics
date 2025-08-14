@@ -13,36 +13,48 @@ import (
 )
 
 type MetricsServiceReader interface {
-	GetMetricValue(mType, mName string) (string, error)
-	GetJSONMetricValue(metric *models.Metrics) (*models.Metrics, error)
-	GetAllMetrics() map[string]string
+	GetMetricValue(ctx context.Context, mType, mName string) (string, error)
+	GetJSONMetricValue(ctx context.Context, metric *models.Metrics) (*models.Metrics, error)
+	GetAllMetrics(ctx context.Context) (map[string]string, error)
 }
 
 type MetricsServiceWriter interface {
-	UpdateMetricFromParams(mType, mName, mValue string) error
-	UpdateJSONMetricFromParams(metric *models.Metrics) error
+	UpdateMetricFromParams(ctx context.Context, mType, mName, mValue string) error
+	UpdateJSONMetric(ctx context.Context, metric *models.Metrics) error
+	UpdateJSONMetrics(ctx context.Context, metrics []models.Metrics) error
+}
+
+type MetricsServicePinger interface {
+	PingCheck(ctx context.Context) error
 }
 
 type MetricsServiceInterface interface {
 	MetricsServiceReader
 	MetricsServiceWriter
+	MetricsServicePinger
 }
 
 type MetricsHandler struct {
 	reader MetricsServiceReader
 	writer MetricsServiceWriter
+	pinger MetricsServicePinger
 	logger *zap.Logger
 }
 
 func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *MetricsHandler {
-	return &MetricsHandler{
+	mh := &MetricsHandler{
 		reader: service,
 		writer: service,
 		logger: logger,
 	}
+
+	if p, ok := service.(MetricsServicePinger); ok {
+		mh.pinger = p
+	}
+	return mh
 }
 
-func StartServer(ctx context.Context, cfg *configs.ServerConfig, mh *MetricsHandler) error {
+func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig) error {
 	r := chi.NewRouter()
 	initRoutes(r, mh)
 

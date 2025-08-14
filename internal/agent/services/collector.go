@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -70,62 +72,88 @@ func newMetricsProvider() *metricsProvider {
 	}
 }
 
-func (cs *MetricsCollectService) updateCollectMetrics() error {
+func (cs *MetricsCollectService) updateCollectMetrics(ctx context.Context) error {
 	runtime.ReadMemStats(cs.metrics.stats)
 
 	for name, fn := range cs.metrics.runtimeMetrics {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		val := fn(cs.metrics.stats)
-		err := cs.writer.UpdateMetrics(&models.Metrics{
+		if err := cs.writer.UpdateMetrics(&models.Metrics{
 			ID:    name,
 			MType: models.Gauge,
 			Value: &val,
-		})
-		if err != nil {
+		}); err != nil {
 			return fmt.Errorf("update %s metric error: %w", name, err)
-
 		}
 	}
 
 	return nil
 }
 
-func (cs *MetricsCollectService) updateRandomValue() error {
+func (cs *MetricsCollectService) updateRandomValue(ctx context.Context) error {
 	random := rand.Float64()
-	err := cs.writer.UpdateMetrics(&models.Metrics{
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    randomValueMetric,
 		MType: models.Gauge,
 		Value: &random,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("update %s metric error: %w", randomValueMetric, err)
 	}
+
 	return nil
 }
 
-func (cs *MetricsCollectService) updatePollCount() error {
+func (cs *MetricsCollectService) updatePollCount(ctx context.Context) error {
 	var pollCount int64 = 1
-	err := cs.writer.UpdateMetrics(&models.Metrics{
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if err := cs.writer.UpdateMetrics(&models.Metrics{
 		ID:    pollCountMetric,
 		MType: models.Counter,
 		Delta: &pollCount,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("update %s metric error: %w", pollCountMetric, err)
 	}
 	return nil
 }
 
-func (cs *MetricsCollectService) UpdateAllMetrics() error {
-	if err := cs.updateCollectMetrics(); err != nil {
-		return err
+func (cs *MetricsCollectService) UpdateAllMetrics(ctx context.Context) error {
+	if err := cs.updateCollectMetrics(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("failed to update metrics: %w", err)
 	}
 
-	if err := cs.updateRandomValue(); err != nil {
-		return err
+	if err := cs.updateRandomValue(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("failed to update metrics: %w", err)
 	}
 
-	if err := cs.updatePollCount(); err != nil {
-		return err
+	if err := cs.updatePollCount(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("failed to update metrics: %w", err)
 	}
 
 	return nil

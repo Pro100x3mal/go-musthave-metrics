@@ -6,11 +6,13 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories/retry"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
 	"go.uber.org/zap"
 )
@@ -30,7 +32,7 @@ func run() error {
 
 	cfg, err := configs.GetConfig()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get config: %w", err)
 	}
 
 	logger, err := infrastructure.NewLogger(cfg)
@@ -39,24 +41,47 @@ func run() error {
 	}
 	defer logger.Sync()
 
+	mainLogger := logger.Named("main")
+	srvLogger := logger.Named("server")
+
+	mainLogger.Info("starting application")
+
+	var repo repositories.Repository
 	var wg sync.WaitGroup
 
-	ms := repositories.NewMemStorage()
-	repo, err := repositories.NewFileStorage(ctx, cfg, ms, &wg, logger)
-	if err != nil {
-		return err
+	switch {
+	case cfg.DatabaseDSN != "":
+		dbLogger := logger.Named("database")
+		dbRepo, err := repositories.NewDB(ctx, cfg, dbLogger)
+		if err != nil {
+			dbLogger.Error("failed to initialize database storage", zap.Error(err))
+			return err
+		}
+		defer dbRepo.Close()
+		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, time.Second)
+	case cfg.FileStoragePath != "":
+		fsLogger := logger.Named("file_storage")
+		msRepo := repositories.NewMemStorage()
+		repo, err = repositories.NewFileStorage(ctx, cfg, msRepo, &wg, fsLogger)
+		if err != nil {
+			fsLogger.Error("failed to initialize file storage", zap.Error(err))
+			return err
+		}
+	default:
+		msLogger := logger.Named("memory_storage")
+		msLogger.Info("initializing in-memory storage")
+		repo = repositories.NewMemStorage()
+		msLogger.Info("in-memory storage initialized successfully")
 	}
 
-	metricsService := services.NewMetricsService(repo)
-	metricsHandler := handlers.NewMetricsHandler(metricsService, logger)
+	service := services.NewMetricsService(repo)
+	handler := handlers.NewMetricsHandler(service, srvLogger)
 
-	logger.Info("starting application")
-
-	if err = handlers.StartServer(ctx, cfg, metricsHandler); err != nil {
-		logger.Error("server failed", zap.Error(err))
+	if err = handler.StartServer(ctx, cfg); err != nil {
+		srvLogger.Error("server failed", zap.Error(err))
 	}
 
 	wg.Wait()
-	logger.Info("application stopped gracefully")
+	mainLogger.Info("application stopped gracefully")
 	return err
 }
