@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,8 @@ type mockUpdater struct{}
 func initRouterForTests() http.Handler {
 	mockUpd := &mockUpdater{}
 	zl := zap.NewNop()
-	handler := NewMetricsHandler(mockUpd, zl)
+	cfg := &configs.ServerConfig{}
+	handler := NewMetricsHandler(mockUpd, zl, cfg)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)

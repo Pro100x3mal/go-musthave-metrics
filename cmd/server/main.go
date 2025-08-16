@@ -75,9 +75,9 @@ func run() error {
 	}
 
 	service := services.NewMetricsService(repo)
-	handler := handlers.NewMetricsHandler(service, srvLogger)
+	handler := handlers.NewMetricsHandler(service, srvLogger, cfg)
 
-	if err = handler.StartServer(ctx, cfg); err != nil {
+	if err = handler.StartServer(ctx); err != nil {
 		srvLogger.Error("server failed", zap.Error(err))
 	}
 

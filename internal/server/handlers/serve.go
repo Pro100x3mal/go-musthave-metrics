@@ -39,13 +39,15 @@ type MetricsHandler struct {
 	writer MetricsServiceWriter
 	pinger MetricsServicePinger
 	logger *zap.Logger
+	cfg    *configs.ServerConfig
 }
 
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig) *MetricsHandler {
 	mh := &MetricsHandler{
 		reader: service,
 		writer: service,
 		logger: logger,
+		cfg:    cfg,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {
@@ -54,16 +56,16 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger) *Met
 	return mh
 }
 
-func (mh *MetricsHandler) StartServer(ctx context.Context, cfg *configs.ServerConfig) error {
+func (mh *MetricsHandler) StartServer(ctx context.Context) error {
 	r := chi.NewRouter()
 	initRoutes(r, mh)
 
 	srv := &http.Server{
-		Addr:    cfg.ServerAddr,
+		Addr:    mh.cfg.ServerAddr,
 		Handler: r,
 	}
 
-	mh.logger.Info("starting server...", zap.String("address", cfg.ServerAddr))
+	mh.logger.Info("starting server...", zap.String("address", mh.cfg.ServerAddr))
 
 	serverErrCh := make(chan error, 1)
 
