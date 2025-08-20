@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"math/rand"
 	"runtime"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type RepositoryWriter interface {
@@ -16,14 +19,18 @@ type RepositoryWriter interface {
 }
 
 type MetricsCollectService struct {
-	writer  RepositoryWriter
-	metrics *metricsProvider
+	writer     RepositoryWriter
+	rntMetrics *runtimeMetricsProvider
+	memMetrics *sysMemMetricsProvider
+	cpuMetrics *sysCPUMetricsProvider
 }
 
 func NewMetricsCollectService(writer RepositoryWriter) *MetricsCollectService {
 	return &MetricsCollectService{
-		writer:  writer,
-		metrics: newMetricsProvider(),
+		writer:     writer,
+		rntMetrics: newRuntimeMetricsProvider(),
+		memMetrics: newSysMemMetricsProvider(),
+		cpuMetrics: newSysCPUMetricsProvider(),
 	}
 }
 
@@ -32,13 +39,13 @@ const (
 	randomValueMetric = "RandomValue"
 )
 
-type metricsProvider struct {
+type runtimeMetricsProvider struct {
 	stats          *runtime.MemStats
 	runtimeMetrics map[string]func(m *runtime.MemStats) float64
 }
 
-func newMetricsProvider() *metricsProvider {
-	return &metricsProvider{
+func newRuntimeMetricsProvider() *runtimeMetricsProvider {
+	return &runtimeMetricsProvider{
 		stats: &runtime.MemStats{},
 		runtimeMetrics: map[string]func(m *runtime.MemStats) float64{
 			"Alloc":         func(m *runtime.MemStats) float64 { return float64(m.Alloc) },
@@ -72,17 +79,17 @@ func newMetricsProvider() *metricsProvider {
 	}
 }
 
-func (cs *MetricsCollectService) updateCollectMetrics(ctx context.Context) error {
-	runtime.ReadMemStats(cs.metrics.stats)
+func (cs *MetricsCollectService) updateRuntimeMetrics(ctx context.Context) error {
+	runtime.ReadMemStats(cs.rntMetrics.stats)
 
-	for name, fn := range cs.metrics.runtimeMetrics {
+	for name, fn := range cs.rntMetrics.runtimeMetrics {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
 
-		val := fn(cs.metrics.stats)
+		val := fn(cs.rntMetrics.stats)
 		if err := cs.writer.UpdateMetrics(&models.Metrics{
 			ID:    name,
 			MType: models.Gauge,
@@ -134,12 +141,113 @@ func (cs *MetricsCollectService) updatePollCount(ctx context.Context) error {
 	return nil
 }
 
+type sysMemMetricsProvider struct {
+	systemMemoryMetrics map[string]func(*mem.VirtualMemoryStat) float64
+}
+
+func newSysMemMetricsProvider() *sysMemMetricsProvider {
+	return &sysMemMetricsProvider{
+		systemMemoryMetrics: map[string]func(vm *mem.VirtualMemoryStat) float64{
+			"TotalMemory": func(vm *mem.VirtualMemoryStat) float64 { return float64(vm.Total) },
+			"FreeMemory":  func(vm *mem.VirtualMemoryStat) float64 { return float64(vm.Free) },
+		},
+	}
+}
+
+func (cs *MetricsCollectService) updateSysMemoryMetrics(ctx context.Context) error {
+	vm, err := mem.VirtualMemory()
+	if err != nil {
+		return fmt.Errorf("failed to get virtual memory statistics: %w", err)
+	}
+
+	for name, fn := range cs.memMetrics.systemMemoryMetrics {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		val := fn(vm)
+		if err := cs.writer.UpdateMetrics(&models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &val,
+		}); err != nil {
+			return fmt.Errorf("update %s metric error: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+type sysCPUMetricsProvider struct {
+	cpuCount int
+}
+
+func newSysCPUMetricsProvider() *sysCPUMetricsProvider {
+	count, err := cpu.Counts(true)
+	if err != nil {
+		count = runtime.NumCPU()
+	}
+
+	return &sysCPUMetricsProvider{
+		cpuCount: count,
+	}
+}
+
+func (cs *MetricsCollectService) updateCPUMetrics(ctx context.Context) error {
+	percentages, err := cpu.Percent(time.Second, true)
+	if err != nil {
+		return fmt.Errorf("failed to get CPU utilization: %w", err)
+	}
+
+	expectedCount := cs.cpuMetrics.cpuCount
+	if len(percentages) != expectedCount {
+		return fmt.Errorf("expected %d CPU metrics, got %d", expectedCount, len(percentages))
+	}
+
+	for i, percentage := range percentages {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		metricName := fmt.Sprintf("CPUutilization%d", i)
+		val := percentage
+
+		if err := cs.writer.UpdateMetrics(&models.Metrics{
+			ID:    metricName,
+			MType: models.Gauge,
+			Value: &val,
+		}); err != nil {
+			return fmt.Errorf("update %s metric error: %w", metricName, err)
+		}
+	}
+
+	return nil
+}
+
 func (cs *MetricsCollectService) UpdateAllMetrics(ctx context.Context) error {
-	if err := cs.updateCollectMetrics(ctx); err != nil {
+	if err := cs.updateRuntimeMetrics(ctx); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 		return fmt.Errorf("failed to update metrics: %w", err)
+	}
+
+	if err := cs.updateSysMemoryMetrics(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("failed to update metrics: %w", err)
+	}
+
+	if err := cs.updateCPUMetrics(ctx); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("failed to update CPU metrics: %w", err)
 	}
 
 	if err := cs.updateRandomValue(ctx); err != nil {
