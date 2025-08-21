@@ -15,6 +15,7 @@ type ServerConfig struct {
 	FileStoragePath string
 	IsRestore       bool
 	DatabaseDSN     string
+	Key             string
 }
 
 func GetConfig() (*ServerConfig, error) {
@@ -29,6 +30,7 @@ func GetConfig() (*ServerConfig, error) {
 	flag.StringVar(&cfg.FileStoragePath, "f", "", "path to metrics storage file")
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database PostgreSQL DSN")
+	flag.StringVar(&cfg.Key, "k", "", "signing key")
 
 	flag.Parse()
 
@@ -66,6 +68,10 @@ func GetConfig() (*ServerConfig, error) {
 
 	if envDatabaseDSN, ok := os.LookupEnv("DATABASE_DSN"); ok && envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	if envKey, ok := os.LookupEnv("KEY"); ok && envKey != "" {
+		cfg.Key = envKey
 	}
 
 	return &cfg, nil

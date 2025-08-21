@@ -45,6 +45,8 @@ func run() error {
 	queryService := services.NewMetricsQueryService(repo)
 
 	newClient := services.NewClient(cfg)
+	pool := services.NewWorkerPool(cfg)
+	pool.Start()
 
 	tickerPoll := time.NewTicker(cfg.PollInterval)
 	tickerReport := time.NewTicker(cfg.ReportInterval)
@@ -57,6 +59,7 @@ func run() error {
 			logger.Info("shutdown signal received, waiting for operations to complete...")
 			tickerPoll.Stop()
 			tickerReport.Stop()
+			pool.Stop()
 
 			wg.Wait()
 			logger.Info("all operations completed, shutting down gracefully")
@@ -77,10 +80,7 @@ func run() error {
 			}()
 
 		case <-tickerReport.C:
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			pool.Submit(func() {
 				if err := queryService.SendMetrics(ctx, newClient); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						logger.Debug("request cancelled")
@@ -94,7 +94,7 @@ func run() error {
 				if err := collectService.ResetPollCount(); err != nil {
 					logger.Error("failed to reset poll count", zap.Error(err))
 				}
-			}()
+			})
 		}
 	}
 }

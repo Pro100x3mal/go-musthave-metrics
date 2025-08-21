@@ -142,20 +142,18 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	defer tx.Rollback(ctx)
 
 	if len(gauges) > 0 {
-		var qb strings.Builder
-		qb.WriteString("INSERT INTO gauges (id, value) VALUES ")
+		var values []string
 		var args []any
 		for i, m := range gauges {
-			n := i*2 + 1
-			qb.WriteString(fmt.Sprintf("($%d, $%d)", n, n+1))
-			if i < len(gauges)-1 {
-				qb.WriteString(", ")
-			}
+			base := i * 2
+			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)
+			values = append(values, params)
 			args = append(args, m.ID, *m.Value)
 		}
-		qb.WriteString(" ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value")
 
-		_, err = tx.Exec(ctx, qb.String(), args...)
+		query := `INSERT INTO gauges (id, value) VALUES ` + strings.Join(values, ",") + ` ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value`
+
+		_, err = tx.Exec(ctx, query, args...)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				return err
@@ -165,20 +163,18 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	}
 
 	if len(counters) > 0 {
-		var qb strings.Builder
-		qb.WriteString("INSERT INTO counters (id, delta) VALUES ")
+		var values []string
 		var args []any
 		for i, m := range counters {
-			n := i*2 + 1
-			qb.WriteString(fmt.Sprintf("($%d, $%d)", n, n+1))
-			if i < len(counters)-1 {
-				qb.WriteString(", ")
-			}
+			base := i * 2
+			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)
+			values = append(values, params)
 			args = append(args, m.ID, *m.Delta)
 		}
-		qb.WriteString(" ON CONFLICT (id) DO UPDATE SET delta = counters.delta + EXCLUDED.delta")
 
-		_, err = tx.Exec(ctx, qb.String(), args...)
+		query := `INSERT INTO counters (id, delta) VALUES ` + strings.Join(values, ",") + ` ON CONFLICT (id) DO UPDATE SET delta = counters.delta + EXCLUDED.delta`
+
+		_, err = tx.Exec(ctx, query, args...)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				return err
