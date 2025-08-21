@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
@@ -96,4 +97,45 @@ func signBody(body []byte, key string) string {
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write(body)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+type Task func()
+
+type WorkerPool struct {
+	numWorkers int
+	queue      chan Task
+	wg         sync.WaitGroup
+}
+
+func NewWorkerPool(cfg *configs.AgentConfig) *WorkerPool {
+	numWorkers := cfg.RateLimit
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+
+	return &WorkerPool{
+		numWorkers: numWorkers,
+		queue:      make(chan Task, numWorkers),
+	}
+}
+
+func (p *WorkerPool) Start() {
+	for i := 0; i < p.numWorkers; i++ {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			for task := range p.queue {
+				task()
+			}
+		}()
+	}
+}
+
+func (p *WorkerPool) Submit(t Task) {
+	p.queue <- t
+}
+
+func (p *WorkerPool) Stop() {
+	close(p.queue)
+	p.wg.Wait()
 }

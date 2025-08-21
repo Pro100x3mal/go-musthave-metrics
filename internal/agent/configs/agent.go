@@ -14,6 +14,7 @@ type AgentConfig struct {
 	ServerAddr     string
 	LogLevel       string
 	Key            string
+	RateLimit      int
 }
 
 func GetConfig() (*AgentConfig, error) {
@@ -25,8 +26,9 @@ func GetConfig() (*AgentConfig, error) {
 	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
 	flag.IntVar(&pollSec, "p", 2, "polling interval in seconds")
 	flag.IntVar(&reportSec, "r", 10, "reporting interval in seconds")
-	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.LogLevel, "log-level", "info", "log level")
 	flag.StringVar(&cfg.Key, "k", "", "signing key")
+	flag.IntVar(&cfg.RateLimit, "l", 5, "report rate limit")
 	flag.Parse()
 
 	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
@@ -58,6 +60,14 @@ func GetConfig() (*AgentConfig, error) {
 
 	if envKey, ok := os.LookupEnv("KEY"); ok && envKey != "" {
 		cfg.Key = envKey
+	}
+
+	if envRateLimitStr, ok := os.LookupEnv("RATE_LIMIT"); ok && envRateLimitStr != "" {
+		envRateLimit, err := strconv.Atoi(envRateLimitStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse RATE_LIMIT value %q to integer: %w", envRateLimit, err)
+		}
+		cfg.RateLimit = envRateLimit
 	}
 
 	return &cfg, nil
