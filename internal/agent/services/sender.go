@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
@@ -33,13 +37,26 @@ type Client struct {
 }
 
 func NewClient(cfg *configs.AgentConfig) *Client {
+	c := resty.New().
+		SetBaseURL("http://" + cfg.ServerAddr).
+		SetTimeout(10 * time.Second).
+		SetRetryCount(3).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second)
+
+	c.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
+		if cfg.Key == "" {
+			return nil
+		}
+
+		if body, ok := r.Body.([]byte); ok && len(body) > 0 {
+			r.SetHeader("HashSHA256", signBody(body, cfg.Key))
+		}
+		return nil
+	})
+
 	return &Client{
-		client: resty.New().
-			SetBaseURL("http://" + cfg.ServerAddr).
-			SetTimeout(10 * time.Second).
-			SetRetryCount(3).
-			SetRetryWaitTime(1 * time.Second).
-			SetRetryMaxWaitTime(5 * time.Second),
+		client: c,
 	}
 }
 
@@ -74,4 +91,51 @@ func (qs *MetricsQueryService) SendMetrics(ctx context.Context, c *Client) error
 	}
 
 	return nil
+}
+
+func signBody(body []byte, key string) string {
+	h := hmac.New(sha256.New, []byte(key))
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+type Task func()
+
+type WorkerPool struct {
+	numWorkers int
+	queue      chan Task
+	wg         sync.WaitGroup
+}
+
+func NewWorkerPool(cfg *configs.AgentConfig) *WorkerPool {
+	numWorkers := cfg.RateLimit
+	if numWorkers <= 0 {
+		numWorkers = 1
+	}
+
+	return &WorkerPool{
+		numWorkers: numWorkers,
+		queue:      make(chan Task, numWorkers),
+	}
+}
+
+func (p *WorkerPool) Start() {
+	for i := 0; i < p.numWorkers; i++ {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			for task := range p.queue {
+				task()
+			}
+		}()
+	}
+}
+
+func (p *WorkerPool) Submit(t Task) {
+	p.queue <- t
+}
+
+func (p *WorkerPool) Stop() {
+	close(p.queue)
+	p.wg.Wait()
 }

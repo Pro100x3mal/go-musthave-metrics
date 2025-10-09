@@ -8,6 +8,7 @@ import (
 
 func initRoutes(r *chi.Mux, mh *MetricsHandler) {
 	r.Use(middlewares.NewLoggerHandler(mh.logger.With(zap.String("component", "http_logger"))).Middleware)
+	r.Use(middlewares.NewSignHandler(mh.logger.With(zap.String("component", "http_sign")), mh.cfg.Key).Middleware)
 	r.Use(middlewares.NewCompressHandler(mh.logger.With(zap.String("component", "http_compress"))).Middleware)
 
 	r.Get("/", mh.ListAllMetricsHandler)
