@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -28,6 +29,13 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 	if err := mh.writer.UpdateMetricFromParams(r.Context(), mType, mName, mValue); err != nil {
 		mh.writeError(w, err, "failed to update metric")
 		return
+	}
+
+	if mh.auditManager != nil && mh.auditManager.HasObservers() {
+		ipAddress := audit.GetIPAddress(r)
+		metric := &models.Metrics{ID: mName, MType: mType}
+		auditEvent := audit.NewAuditEventFromMetric(metric, ipAddress)
+		go mh.auditManager.NotifyAll(r.Context(), auditEvent)
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -58,6 +66,12 @@ func (mh *MetricsHandler) UpdateJSONHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	if mh.auditManager != nil && mh.auditManager.HasObservers() {
+		ipAddress := audit.GetIPAddress(r)
+		auditEvent := audit.NewAuditEventFromMetric(&metric, ipAddress)
+		go mh.auditManager.NotifyAll(r.Context(), auditEvent)
+	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 }
@@ -86,6 +100,12 @@ func (mh *MetricsHandler) UpdateBatchJSONHandler(w http.ResponseWriter, r *http.
 	if err != nil {
 		mh.writeError(w, err, "failed to update metrics")
 		return
+	}
+
+	if mh.auditManager != nil && mh.auditManager.HasObservers() {
+		ipAddress := audit.GetIPAddress(r)
+		auditEvent := audit.NewAuditEventFromMetrics(metrics, ipAddress)
+		go mh.auditManager.NotifyAll(r.Context(), auditEvent)
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

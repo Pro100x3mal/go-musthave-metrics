@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -35,19 +36,21 @@ type MetricsServiceInterface interface {
 }
 
 type MetricsHandler struct {
-	reader MetricsServiceReader
-	writer MetricsServiceWriter
-	pinger MetricsServicePinger
-	logger *zap.Logger
-	cfg    *configs.ServerConfig
+	reader       MetricsServiceReader
+	writer       MetricsServiceWriter
+	pinger       MetricsServicePinger
+	logger       *zap.Logger
+	cfg          *configs.ServerConfig
+	auditManager *audit.AuditManager
 }
 
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager *audit.AuditManager) *MetricsHandler {
 	mh := &MetricsHandler{
-		reader: service,
-		writer: service,
-		logger: logger,
-		cfg:    cfg,
+		reader:       service,
+		writer:       service,
+		logger:       logger,
+		cfg:          cfg,
+		auditManager: auditManager,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {

@@ -16,6 +16,8 @@ type ServerConfig struct {
 	IsRestore       bool
 	DatabaseDSN     string
 	Key             string
+	AuditFile       string
+	AuditURL        string
 }
 
 func GetConfig() (*ServerConfig, error) {
@@ -31,6 +33,8 @@ func GetConfig() (*ServerConfig, error) {
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database PostgreSQL DSN")
 	flag.StringVar(&cfg.Key, "k", "", "signing key")
+	flag.StringVar(&cfg.AuditFile, "audit-file", "audit.log", "path to audit log file")
+	flag.StringVar(&cfg.AuditURL, "audit-url", "", "URL for audit log server")
 
 	flag.Parse()
 
@@ -72,6 +76,14 @@ func GetConfig() (*ServerConfig, error) {
 
 	if envKey, ok := os.LookupEnv("KEY"); ok && envKey != "" {
 		cfg.Key = envKey
+	}
+
+	if envAuditFile, ok := os.LookupEnv("AUDIT_FILE"); ok && envAuditFile != "" {
+		cfg.AuditFile = envAuditFile
+	}
+
+	if envAuditURL, ok := os.LookupEnv("AUDIT_URL"); ok && envAuditURL != "" {
+		cfg.AuditURL = envAuditURL
 	}
 
 	return &cfg, nil
