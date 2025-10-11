@@ -23,6 +23,7 @@ type Observer interface {
 type Publisher interface {
 	Attach(observer Observer)
 	NotifyAll(ctx context.Context, event *models.AuditEvent)
+	HasObservers() bool
 }
 
 type AuditManager struct {

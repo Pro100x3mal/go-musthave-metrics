@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -17,15 +18,26 @@ import (
 
 type mockUpdater struct{}
 
+type mockAuditManager struct{}
+
 func initRouterForTests() http.Handler {
 	mockUpd := &mockUpdater{}
+	mockAud := &mockAuditManager{}
 	zl := zap.NewNop()
 	cfg := &configs.ServerConfig{}
-	handler := NewMetricsHandler(mockUpd, zl, cfg)
+	handler := NewMetricsHandler(mockUpd, zl, cfg, mockAud)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)
 	return r
+}
+
+func (m *mockAuditManager) Attach(_ audit.Observer) {}
+
+func (m *mockAuditManager) NotifyAll(_ context.Context, _ *models.AuditEvent) {}
+
+func (m *mockAuditManager) HasObservers() bool {
+	return false
 }
 
 func (m *mockUpdater) UpdateJSONMetrics(_ context.Context, _ []models.Metrics) error {

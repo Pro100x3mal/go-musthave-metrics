@@ -41,10 +41,10 @@ type MetricsHandler struct {
 	pinger       MetricsServicePinger
 	logger       *zap.Logger
 	cfg          *configs.ServerConfig
-	auditManager *audit.AuditManager
+	auditManager audit.Publisher
 }
 
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager *audit.AuditManager) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher) *MetricsHandler {
 	mh := &MetricsHandler{
 		reader:       service,
 		writer:       service,
