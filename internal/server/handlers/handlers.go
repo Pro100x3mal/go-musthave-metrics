@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
+	"html/template"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,11 +19,6 @@ func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) 
 	mType := chi.URLParam(r, "mType")
 	mName := chi.URLParam(r, "mName")
 	mValue := chi.URLParam(r, "mValue")
-
-	if mType == "" || mName == "" || mValue == "" {
-		http.NotFound(w, r)
-		return
-	}
 
 	if err := mh.writer.UpdateMetricFromParams(r.Context(), mType, mName, mValue); err != nil {
 		mh.writeError(w, err, "failed to update metric")
@@ -165,6 +159,27 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	}
 }
 
+const metricsTemplate = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Metrics</title>
+</head>
+<body>
+    <h1>Metrics</h1>
+    <ul>
+    {{range .}}
+        <li>{{.Name}}: {{.Value}}</li>
+    {{end}}
+    </ul>
+</body>
+</html>`
+
+type MetricItem struct {
+	Name  string
+	Value string
+}
+
 func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	list, err := mh.reader.GetAllMetrics(r.Context())
 	if err != nil {
@@ -178,19 +193,26 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.R
 	}
 	sort.Strings(keys)
 
-	var builder strings.Builder
-	builder.WriteString("<html><body><h1>Metrics</h1><ul>")
+	items := make([]MetricItem, 0, len(keys))
 	for _, name := range keys {
-		val := list[name]
-		builder.WriteString(fmt.Sprintf("<li>%s: %s</li>\n", name, val))
+		items = append(items, MetricItem{
+			Name:  name,
+			Value: list[name],
+		})
 	}
-	builder.WriteString("</ul></body></html>")
+
+	tmpl, err := template.New("metrics").Parse(metricsTemplate)
+	if err != nil {
+		mh.logger.Error("failed to parse template", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, err = io.WriteString(w, builder.String())
+	err = tmpl.Execute(w, items)
 	if err != nil {
-		mh.logger.Error("failed to write response", zap.Error(err))
+		mh.logger.Error("failed to execute template", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
