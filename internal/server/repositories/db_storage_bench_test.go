@@ -48,6 +48,7 @@ func BenchmarkUpdateMetrics_WithoutCapacity(b *testing.B) {
 						MType: models.Gauge,
 					})
 				}
+				_ = gauges
 			}
 		})
 	}
@@ -72,6 +73,7 @@ func BenchmarkUpdateMetrics_WithCapacity(b *testing.B) {
 						MType: models.Gauge,
 					})
 				}
+				_ = gauges
 			}
 		})
 	}
