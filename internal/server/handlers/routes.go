@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/middlewares"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 )
 
@@ -22,4 +23,7 @@ func initRoutes(r *chi.Mux, mh *MetricsHandler) {
 		r.Post("/", mh.UpdateJSONHandler)
 		r.Post("/{mType}/{mName}/{mValue}", mh.UpdateHandler)
 	})
+
+	// pprof endpoints для профилирования (встроенный chi middleware)
+	r.Mount("/debug", middleware.Profiler())
 }
