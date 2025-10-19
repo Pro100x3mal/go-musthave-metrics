@@ -59,7 +59,7 @@ func run() error {
 			return err
 		}
 		defer dbRepo.Close()
-		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, time.Second)
+		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, 0)
 	case cfg.FileStoragePath != "":
 		fsLogger := zLog.Named("file_storage")
 		msRepo := repositories.NewMemStorage()

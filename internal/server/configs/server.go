@@ -33,7 +33,7 @@ func GetConfig() (*ServerConfig, error) {
 	flag.BoolVar(&cfg.IsRestore, "r", false, "load metrics from file on startup")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database PostgreSQL DSN")
 	flag.StringVar(&cfg.Key, "k", "", "signing key")
-	flag.StringVar(&cfg.AuditFile, "audit-file", "audit.log", "path to audit log file")
+	flag.StringVar(&cfg.AuditFile, "audit-file", "audit.json", "path to audit log file")
 	flag.StringVar(&cfg.AuditURL, "audit-url", "", "URL for audit log server")
 
 	flag.Parse()

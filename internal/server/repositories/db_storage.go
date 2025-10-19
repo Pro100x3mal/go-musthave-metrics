@@ -5,7 +5,9 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
@@ -72,6 +74,12 @@ func initPool(ctx context.Context, cfg *configs.ServerConfig) (*pgxpool.Pool, er
 		return nil, fmt.Errorf("failed to parse database DSN %s: %w", cfg.DatabaseDSN, err)
 	}
 
+	poolCfg.MaxConns = 50
+	poolCfg.MinConns = 10
+	poolCfg.MaxConnLifetime = 1 * time.Hour
+	poolCfg.MaxConnIdleTime = 30 * time.Minute
+	poolCfg.HealthCheckPeriod = 1 * time.Minute
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize a connection pool: %w", err)
@@ -96,43 +104,31 @@ func (db *DB) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
-	if metrics == nil {
-		return errors.New("no metrics provided: slice is nil")
-	}
-	gaugeMap := make(map[string]float64)
-	counterMap := make(map[string]int64)
+const defaultChunkSize = 100
 
-	for _, m := range metrics {
-		switch m.MType {
-		case models.Gauge:
-			if m.Value == nil {
-				return errors.New("nil gauge value")
-			}
-			gaugeMap[m.ID] = *m.Value
-		case models.Counter:
-			if m.Delta == nil {
-				return errors.New("nil counter delta")
-			}
-			counterMap[m.ID] += *m.Delta
+func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Metrics {
+	if chunkSize <= 0 {
+		chunkSize = defaultChunkSize
+	}
+
+	if len(items) == 0 {
+		return nil
+	}
+
+	var chunks [][]models.Metrics
+	for i := 0; i < len(items); i += chunkSize {
+		end := i + chunkSize
+		if end > len(items) {
+			end = len(items)
 		}
+		chunks = append(chunks, items[i:end])
 	}
-	var gauges, counters []models.Metrics
-	for id, v := range gaugeMap {
-		value := v
-		gauges = append(gauges, models.Metrics{
-			ID:    id,
-			Value: &value,
-			MType: models.Gauge,
-		})
-	}
-	for id, d := range counterMap {
-		delta := d
-		counters = append(counters, models.Metrics{
-			ID:    id,
-			Delta: &delta,
-			MType: models.Counter,
-		})
+	return chunks
+}
+
+func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.Metrics) error {
+	if len(gauges) == 0 && len(counters) == 0 {
+		return nil
 	}
 
 	tx, err := db.pool.Begin(ctx)
@@ -185,6 +181,72 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if metrics == nil {
+		return errors.New("no metrics provided: slice is nil")
+	}
+	gaugeMap := make(map[string]float64)
+	counterMap := make(map[string]int64)
+
+	for _, m := range metrics {
+		switch m.MType {
+		case models.Gauge:
+			if m.Value == nil {
+				return errors.New("nil gauge value")
+			}
+			gaugeMap[m.ID] = *m.Value
+		case models.Counter:
+			if m.Delta == nil {
+				return errors.New("nil counter delta")
+			}
+			counterMap[m.ID] += *m.Delta
+		}
+	}
+
+	var gauges, counters []models.Metrics
+	for id, v := range gaugeMap {
+		value := v
+		gauges = append(gauges, models.Metrics{
+			ID:    id,
+			Value: &value,
+			MType: models.Gauge,
+		})
+	}
+	for id, d := range counterMap {
+		delta := d
+		counters = append(counters, models.Metrics{
+			ID:    id,
+			Delta: &delta,
+			MType: models.Counter,
+		})
+	}
+
+	sort.Slice(gauges, func(i, j int) bool {
+		return gauges[i].ID < gauges[j].ID
+	})
+
+	sort.Slice(counters, func(i, j int) bool {
+		return counters[i].ID < counters[j].ID
+	})
+
+	gaugeChunks := splitMetricsIntoChunks(gauges, defaultChunkSize)
+	counterChunks := splitMetricsIntoChunks(counters, defaultChunkSize)
+
+	for i, chunk := range gaugeChunks {
+		if err := db.updateMetricsChunk(ctx, chunk, nil); err != nil {
+			return fmt.Errorf("failed to update gauge chunk %d/%d: %w", i+1, len(gaugeChunks), err)
+		}
+	}
+
+	for i, chunk := range counterChunks {
+		if err := db.updateMetricsChunk(ctx, nil, chunk); err != nil {
+			return fmt.Errorf("failed to update counter chunk %d/%d: %w", i+1, len(counterChunks), err)
+		}
 	}
 
 	return nil
