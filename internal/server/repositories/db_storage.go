@@ -20,6 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultChunkSize = 100
+
 type DB struct {
 	pool *pgxpool.Pool
 }
@@ -104,8 +106,6 @@ func (db *DB) Ping(ctx context.Context) error {
 	return nil
 }
 
-const defaultChunkSize = 100
-
 func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Metrics {
 	if chunkSize <= 0 {
 		chunkSize = defaultChunkSize
@@ -115,7 +115,7 @@ func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Me
 		return nil
 	}
 
-	var chunks [][]models.Metrics
+	chunks := make([][]models.Metrics, 0, len(items)/chunkSize+1)
 	for i := 0; i < len(items); i += chunkSize {
 		end := i + chunkSize
 		if end > len(items) {
@@ -138,8 +138,8 @@ func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.
 	defer tx.Rollback(ctx)
 
 	if len(gauges) > 0 {
-		var values []string
-		var args []any
+		values := make([]string, 0, len(gauges))
+		args := make([]any, 0, len(gauges)*2)
 		for i, m := range gauges {
 			base := i * 2
 			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)
@@ -159,8 +159,8 @@ func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.
 	}
 
 	if len(counters) > 0 {
-		var values []string
-		var args []any
+		values := make([]string, 0, len(counters))
+		args := make([]any, 0, len(counters)*2)
 		for i, m := range counters {
 			base := i * 2
 			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)
@@ -208,7 +208,7 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 		}
 	}
 
-	var gauges, counters []models.Metrics
+	gauges := make([]models.Metrics, 0, len(gaugeMap))
 	for id, v := range gaugeMap {
 		value := v
 		gauges = append(gauges, models.Metrics{
@@ -217,6 +217,8 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 			MType: models.Gauge,
 		})
 	}
+
+	counters := make([]models.Metrics, 0, len(counterMap))
 	for id, d := range counterMap {
 		delta := d
 		counters = append(counters, models.Metrics{

@@ -5,34 +5,45 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 )
 
 type CompressHandler struct {
-	logger *zap.Logger
+	logger     *zap.Logger
+	readerPool *sync.Pool
 }
 
 func NewCompressHandler(logger *zap.Logger) *CompressHandler {
 	return &CompressHandler{
 		logger: logger,
+		readerPool: &sync.Pool{
+			New: func() interface{} {
+				reader, _ := gzip.NewReader(strings.NewReader(""))
+				return reader
+			},
+		},
 	}
 }
 
 type compressReader struct {
-	r   io.ReadCloser
-	gzr *gzip.Reader
+	r    io.ReadCloser
+	gzr  *gzip.Reader
+	pool *sync.Pool
 }
 
-func newCompressReader(r io.ReadCloser) (*compressReader, error) {
-	gzr, err := gzip.NewReader(r)
-	if err != nil {
+func (ch *CompressHandler) newCompressReader(r io.ReadCloser) (*compressReader, error) {
+	gzr := ch.readerPool.Get().(*gzip.Reader)
+	if err := gzr.Reset(r); err != nil {
+		ch.readerPool.Put(gzr)
 		return nil, err
 	}
 
 	return &compressReader{
-		r:   r,
-		gzr: gzr,
+		r:    r,
+		gzr:  gzr,
+		pool: ch.readerPool,
 	}, nil
 }
 
@@ -41,10 +52,12 @@ func (cr *compressReader) Read(p []byte) (n int, err error) {
 }
 
 func (cr *compressReader) Close() error {
-	if err := cr.r.Close(); err != nil {
+	if err := cr.gzr.Close(); err != nil {
+		cr.pool.Put(cr.gzr)
 		return err
 	}
-	return cr.gzr.Close()
+	cr.pool.Put(cr.gzr)
+	return cr.r.Close()
 }
 
 type compressWriter struct {
@@ -55,9 +68,11 @@ type compressWriter struct {
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
+	gzw, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
+
 	return &compressWriter{
 		w:   w,
-		gzw: gzip.NewWriter(w),
+		gzw: gzw,
 	}
 }
 
@@ -105,7 +120,7 @@ func (cw *compressWriter) Close() error {
 func (ch *CompressHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			cr, err := newCompressReader(r.Body)
+			cr, err := ch.newCompressReader(r.Body)
 			if err != nil {
 				ch.logger.Error("compression error", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -42,6 +43,7 @@ type MetricsHandler struct {
 	logger       *zap.Logger
 	cfg          *configs.ServerConfig
 	auditManager audit.Publisher
+	tmpl         *template.Template
 }
 
 func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher) *MetricsHandler {
@@ -51,6 +53,7 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg 
 		logger:       logger,
 		cfg:          cfg,
 		auditManager: auditManager,
+		tmpl:         template.Must(template.New("metrics").Parse(metricsTemplate)),
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {

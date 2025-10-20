@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"html/template"
 	"net/http"
 	"sort"
 	"strings"
@@ -14,6 +13,22 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
+
+const metricsTemplate = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Metrics</title>
+</head>
+<body>
+    <h1>Metrics</h1>
+    <ul>
+    {{range .}}
+        <li>{{.Name}}: {{.Value}}</li>
+    {{end}}
+    </ul>
+</body>
+</html>`
 
 func (mh *MetricsHandler) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	mType := chi.URLParam(r, "mType")
@@ -159,22 +174,6 @@ func (mh *MetricsHandler) GetJSONMetricHandler(w http.ResponseWriter, r *http.Re
 	}
 }
 
-const metricsTemplate = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Metrics</title>
-</head>
-<body>
-    <h1>Metrics</h1>
-    <ul>
-    {{range .}}
-        <li>{{.Name}}: {{.Value}}</li>
-    {{end}}
-    </ul>
-</body>
-</html>`
-
 type MetricItem struct {
 	Name  string
 	Value string
@@ -201,16 +200,10 @@ func (mh *MetricsHandler) ListAllMetricsHandler(w http.ResponseWriter, r *http.R
 		})
 	}
 
-	tmpl, err := template.New("metrics").Parse(metricsTemplate)
-	if err != nil {
-		mh.logger.Error("failed to parse template", zap.Error(err))
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	err = tmpl.Execute(w, items)
+
+	err = mh.tmpl.Execute(w, items)
 	if err != nil {
 		mh.logger.Error("failed to execute template", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

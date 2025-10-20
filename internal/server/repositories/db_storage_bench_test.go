@@ -89,8 +89,8 @@ func BenchmarkSQLBuilding_StringConcat(b *testing.B) {
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				var values []string
-				var args []any
+				values := make([]string, 0, len(gauges))
+				args := make([]any, 0, len(gauges)*2)
 
 				for j, m := range gauges {
 					base := j * 2
