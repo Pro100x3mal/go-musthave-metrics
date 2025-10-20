@@ -10,16 +10,19 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 )
 
+// MetricsRepositoryPinger provides health check functionality for the metrics repository.
 type MetricsRepositoryPinger interface {
 	Ping(ctx context.Context) error
 }
 
+// MetricsService provides business logic for metrics operations.
 type MetricsService struct {
 	reader repositories.RepositoryReader
 	writer repositories.RepositoryWriter
 	pinger MetricsRepositoryPinger
 }
 
+// NewMetricsService creates a new MetricsService with the provided repository.
 func NewMetricsService(repository repositories.Repository) *MetricsService {
 	ms := &MetricsService{
 		reader: repository,
@@ -32,6 +35,8 @@ func NewMetricsService(repository repositories.Repository) *MetricsService {
 	return ms
 }
 
+// UpdateMetricFromParams updates a metric using URL parameters.
+// It parses the metric value according to its type and updates the repository.
 func (ms *MetricsService) UpdateMetricFromParams(ctx context.Context, mType, mName, mValue string) error {
 	var metric models.Metrics
 	metric.ID = mName
@@ -57,6 +62,7 @@ func (ms *MetricsService) UpdateMetricFromParams(ctx context.Context, mType, mNa
 	}
 }
 
+// UpdateJSONMetric updates a single metric from a JSON request.
 func (ms *MetricsService) UpdateJSONMetric(ctx context.Context, metric *models.Metrics) error {
 	if metric == nil {
 		return models.ErrMetricNotFound
@@ -72,6 +78,7 @@ func (ms *MetricsService) UpdateJSONMetric(ctx context.Context, metric *models.M
 	}
 }
 
+// UpdateJSONMetrics updates multiple metrics from a JSON request in a batch operation.
 func (ms *MetricsService) UpdateJSONMetrics(ctx context.Context, metrics []models.Metrics) error {
 	if metrics == nil {
 		return models.ErrMetricNotFound
@@ -79,6 +86,7 @@ func (ms *MetricsService) UpdateJSONMetrics(ctx context.Context, metrics []model
 	return ms.writer.UpdateMetrics(ctx, metrics)
 }
 
+// GetMetricValue retrieves a metric value as a string by its type and name.
 func (ms *MetricsService) GetMetricValue(ctx context.Context, mType, mName string) (string, error) {
 	switch mType {
 	case models.Gauge:
@@ -98,6 +106,7 @@ func (ms *MetricsService) GetMetricValue(ctx context.Context, mType, mName strin
 	}
 }
 
+// GetJSONMetricValue retrieves a metric value and returns it as a Metrics object.
 func (ms *MetricsService) GetJSONMetricValue(ctx context.Context, metric *models.Metrics) (*models.Metrics, error) {
 	if metric == nil {
 		return nil, models.ErrMetricNotFound
@@ -123,6 +132,7 @@ func (ms *MetricsService) GetJSONMetricValue(ctx context.Context, metric *models
 	}
 }
 
+// GetAllMetrics retrieves all stored metrics as a map of name to value strings.
 func (ms *MetricsService) GetAllMetrics(ctx context.Context) (map[string]string, error) {
 	list := make(map[string]string)
 
@@ -144,6 +154,7 @@ func (ms *MetricsService) GetAllMetrics(ctx context.Context) (map[string]string,
 	return list, nil
 }
 
+// PingCheck verifies the health of the underlying storage connection.
 func (ms *MetricsService) PingCheck(ctx context.Context) error {
 	if ms.pinger == nil {
 		return errors.New("pinging not supported by this repository")

@@ -11,11 +11,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// SignHandler provides HMAC-SHA256 signature validation and signing middleware.
 type SignHandler struct {
 	logger *zap.Logger
 	key    string
 }
 
+// NewSignHandler creates a new SignHandler with the provided logger and HMAC key.
+// If key is empty, the middleware will pass requests through without validation or signing.
 func NewSignHandler(logger *zap.Logger, key string) *SignHandler {
 	return &SignHandler{
 		logger: logger,
@@ -60,6 +63,9 @@ func signBody(body []byte, key string) []byte {
 	return h.Sum(nil)
 }
 
+// Middleware validates incoming request signatures via the HashSHA256 header and signs all responses.
+// If a request includes a HashSHA256 header, it verifies the HMAC-SHA256 signature of the request body.
+// All responses are signed with HMAC-SHA256 and the signature is included in the HashSHA256 response header.
 func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 	if sh.key == "" {
 		return next

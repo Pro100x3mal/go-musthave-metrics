@@ -10,11 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// CompressHandler provides HTTP compression middleware.
 type CompressHandler struct {
 	logger     *zap.Logger
 	readerPool *sync.Pool
 }
 
+// NewCompressHandler creates a new CompressHandler with the provided logger.
 func NewCompressHandler(logger *zap.Logger) *CompressHandler {
 	return &CompressHandler{
 		logger: logger,
@@ -117,6 +119,8 @@ func (cw *compressWriter) Close() error {
 	return nil
 }
 
+// Middleware provides automatic gzip compression for HTTP responses and decompression for HTTP requests.
+// It checks the Accept-Encoding header for gzip support and Content-Encoding header for gzip-compressed requests.
 func (ch *CompressHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
