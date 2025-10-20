@@ -24,6 +24,5 @@ func initRoutes(r *chi.Mux, mh *MetricsHandler) {
 		r.Post("/{mType}/{mName}/{mValue}", mh.UpdateHandler)
 	})
 
-	// pprof endpoints для профилирования (встроенный chi middleware)
 	r.Mount("/debug", middleware.Profiler())
 }

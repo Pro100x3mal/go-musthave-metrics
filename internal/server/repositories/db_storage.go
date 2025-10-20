@@ -106,6 +106,74 @@ func (db *DB) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	if metrics == nil {
+		return errors.New("no metrics provided: slice is nil")
+	}
+	gaugeMap := make(map[string]float64)
+	counterMap := make(map[string]int64)
+
+	for _, m := range metrics {
+		switch m.MType {
+		case models.Gauge:
+			if m.Value == nil {
+				return errors.New("nil gauge value")
+			}
+			gaugeMap[m.ID] = *m.Value
+		case models.Counter:
+			if m.Delta == nil {
+				return errors.New("nil counter delta")
+			}
+			counterMap[m.ID] += *m.Delta
+		}
+	}
+
+	gauges := make([]models.Metrics, 0, len(gaugeMap))
+	for id, v := range gaugeMap {
+		value := v
+		gauges = append(gauges, models.Metrics{
+			ID:    id,
+			Value: &value,
+			MType: models.Gauge,
+		})
+	}
+
+	counters := make([]models.Metrics, 0, len(counterMap))
+	for id, d := range counterMap {
+		delta := d
+		counters = append(counters, models.Metrics{
+			ID:    id,
+			Delta: &delta,
+			MType: models.Counter,
+		})
+	}
+
+	sort.Slice(gauges, func(i, j int) bool {
+		return gauges[i].ID < gauges[j].ID
+	})
+
+	sort.Slice(counters, func(i, j int) bool {
+		return counters[i].ID < counters[j].ID
+	})
+
+	gaugeChunks := splitMetricsIntoChunks(gauges, defaultChunkSize)
+	counterChunks := splitMetricsIntoChunks(counters, defaultChunkSize)
+
+	for i, chunk := range gaugeChunks {
+		if err := db.updateMetricsChunk(ctx, chunk, nil); err != nil {
+			return fmt.Errorf("failed to update gauge chunk %d/%d: %w", i+1, len(gaugeChunks), err)
+		}
+	}
+
+	for i, chunk := range counterChunks {
+		if err := db.updateMetricsChunk(ctx, nil, chunk); err != nil {
+			return fmt.Errorf("failed to update counter chunk %d/%d: %w", i+1, len(counterChunks), err)
+		}
+	}
+
+	return nil
+}
+
 func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Metrics {
 	if chunkSize <= 0 {
 		chunkSize = defaultChunkSize
@@ -181,74 +249,6 @@ func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.
 
 	if err = tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
-}
-
-func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
-	if metrics == nil {
-		return errors.New("no metrics provided: slice is nil")
-	}
-	gaugeMap := make(map[string]float64)
-	counterMap := make(map[string]int64)
-
-	for _, m := range metrics {
-		switch m.MType {
-		case models.Gauge:
-			if m.Value == nil {
-				return errors.New("nil gauge value")
-			}
-			gaugeMap[m.ID] = *m.Value
-		case models.Counter:
-			if m.Delta == nil {
-				return errors.New("nil counter delta")
-			}
-			counterMap[m.ID] += *m.Delta
-		}
-	}
-
-	gauges := make([]models.Metrics, 0, len(gaugeMap))
-	for id, v := range gaugeMap {
-		value := v
-		gauges = append(gauges, models.Metrics{
-			ID:    id,
-			Value: &value,
-			MType: models.Gauge,
-		})
-	}
-
-	counters := make([]models.Metrics, 0, len(counterMap))
-	for id, d := range counterMap {
-		delta := d
-		counters = append(counters, models.Metrics{
-			ID:    id,
-			Delta: &delta,
-			MType: models.Counter,
-		})
-	}
-
-	sort.Slice(gauges, func(i, j int) bool {
-		return gauges[i].ID < gauges[j].ID
-	})
-
-	sort.Slice(counters, func(i, j int) bool {
-		return counters[i].ID < counters[j].ID
-	})
-
-	gaugeChunks := splitMetricsIntoChunks(gauges, defaultChunkSize)
-	counterChunks := splitMetricsIntoChunks(counters, defaultChunkSize)
-
-	for i, chunk := range gaugeChunks {
-		if err := db.updateMetricsChunk(ctx, chunk, nil); err != nil {
-			return fmt.Errorf("failed to update gauge chunk %d/%d: %w", i+1, len(gaugeChunks), err)
-		}
-	}
-
-	for i, chunk := range counterChunks {
-		if err := db.updateMetricsChunk(ctx, nil, chunk); err != nil {
-			return fmt.Errorf("failed to update counter chunk %d/%d: %w", i+1, len(counterChunks), err)
-		}
 	}
 
 	return nil
