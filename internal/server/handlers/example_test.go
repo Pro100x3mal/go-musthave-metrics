@@ -56,7 +56,11 @@ func Example_updateGaugeViaURL() {
 	defer ts.Close()
 
 	// Send POST request to update gauge metric
-	resp, _ := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
+	resp, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
@@ -73,7 +77,11 @@ func Example_updateCounterViaURL() {
 	defer ts.Close()
 
 	// Send POST request to update counter metric
-	resp, _ := http.Post(ts.URL+"/update/counter/requests/5", "text/plain", nil)
+	resp, err := http.Post(ts.URL+"/update/counter/requests/5", "text/plain", nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
@@ -99,7 +107,11 @@ func Example_updateGaugeJSON() {
 	body, _ := json.Marshal(metric)
 
 	// Send POST request with JSON
-	resp, _ := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
@@ -125,7 +137,11 @@ func Example_updateCounterJSON() {
 	body, _ := json.Marshal(metric)
 
 	// Send POST request with JSON
-	resp, _ := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
@@ -159,7 +175,11 @@ func Example_batchUpdate() {
 	body, _ := json.Marshal(metrics)
 
 	// Send POST request with JSON array
-	resp, _ := http.Post(ts.URL+"/updates/", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(ts.URL+"/updates/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
@@ -176,10 +196,19 @@ func Example_getMetricViaURL() {
 	defer ts.Close()
 
 	// First, update a metric
-	http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
+	updateResp, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	updateResp.Body.Close()
 
 	// Then retrieve it
-	resp, _ := http.Get(ts.URL + "/value/gauge/temperature")
+	resp, err := http.Get(ts.URL + "/value/gauge/temperature")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -205,7 +234,12 @@ func Example_getMetricJSON() {
 		Value: &value,
 	}
 	updateBody, _ := json.Marshal(updateMetric)
-	http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(updateBody))
+	updateResp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(updateBody))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	updateResp.Body.Close()
 
 	// Then retrieve it
 	getMetric := models.Metrics{
@@ -214,7 +248,11 @@ func Example_getMetricJSON() {
 	}
 	getBody, _ := json.Marshal(getMetric)
 
-	resp, _ := http.Post(ts.URL+"/value/", "application/json", bytes.NewReader(getBody))
+	resp, err := http.Post(ts.URL+"/value/", "application/json", bytes.NewReader(getBody))
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	var result models.Metrics
@@ -234,11 +272,26 @@ func Example_listAllMetrics() {
 	defer ts.Close()
 
 	// Update some metrics
-	http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
-	http.Post(ts.URL+"/update/counter/requests/10", "text/plain", nil)
+	resp1, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	resp1.Body.Close()
+
+	resp2, err := http.Post(ts.URL+"/update/counter/requests/10", "text/plain", nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	resp2.Body.Close()
 
 	// Get all metrics
-	resp, _ := http.Get(ts.URL + "/")
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
