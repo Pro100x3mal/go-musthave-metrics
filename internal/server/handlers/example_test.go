@@ -59,7 +59,6 @@ func Example_updateGaugeViaURL() {
 	resp, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -80,7 +79,6 @@ func Example_updateCounterViaURL() {
 	resp, err := http.Post(ts.URL+"/update/counter/requests/5", "text/plain", nil)
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -110,7 +108,6 @@ func Example_updateGaugeJSON() {
 	resp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -140,7 +137,6 @@ func Example_updateCounterJSON() {
 	resp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(body))
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -178,7 +174,6 @@ func Example_batchUpdate() {
 	resp, err := http.Post(ts.URL+"/updates/", "application/json", bytes.NewReader(body))
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -199,7 +194,6 @@ func Example_getMetricViaURL() {
 	updateResp, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
 	if err != nil {
 		panic(err)
-		return
 	}
 	updateResp.Body.Close()
 
@@ -207,7 +201,6 @@ func Example_getMetricViaURL() {
 	resp, err := http.Get(ts.URL + "/value/gauge/temperature")
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -237,7 +230,6 @@ func Example_getMetricJSON() {
 	updateResp, err := http.Post(ts.URL+"/update/", "application/json", bytes.NewReader(updateBody))
 	if err != nil {
 		panic(err)
-		return
 	}
 	updateResp.Body.Close()
 
@@ -251,7 +243,6 @@ func Example_getMetricJSON() {
 	resp, err := http.Post(ts.URL+"/value/", "application/json", bytes.NewReader(getBody))
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
@@ -275,14 +266,12 @@ func Example_listAllMetrics() {
 	resp1, err := http.Post(ts.URL+"/update/gauge/temperature/23.5", "text/plain", nil)
 	if err != nil {
 		panic(err)
-		return
 	}
 	resp1.Body.Close()
 
 	resp2, err := http.Post(ts.URL+"/update/counter/requests/10", "text/plain", nil)
 	if err != nil {
 		panic(err)
-		return
 	}
 	resp2.Body.Close()
 
@@ -290,7 +279,6 @@ func Example_listAllMetrics() {
 	resp, err := http.Get(ts.URL + "/")
 	if err != nil {
 		panic(err)
-		return
 	}
 	defer resp.Body.Close()
 
