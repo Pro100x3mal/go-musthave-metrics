@@ -81,7 +81,17 @@ func run() error {
 	auditManager := audit.NewAuditManager(auditLogger)
 
 	if cfg.AuditFile != "" {
-		fileObserver := audit.NewFileAuditObserver(cfg.AuditFile)
+		fileObserver, err := audit.NewFileAuditObserver(cfg.AuditFile)
+		if err != nil {
+			auditLogger.Error("failed to initialize file audit observer", zap.Error(err))
+			return err
+		}
+		defer func(fileObserver *audit.FileAuditObserver) {
+			err := fileObserver.Close()
+			if err != nil {
+				auditLogger.Error("failed to close file audit observer", zap.Error(err))
+			}
+		}(fileObserver)
 		auditManager.Attach(fileObserver)
 		auditLogger.Info("file audit observer enabled", zap.String("file", cfg.AuditFile))
 	}

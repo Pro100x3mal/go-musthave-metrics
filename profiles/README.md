@@ -1,3 +1,129 @@
+# Анализ оптимизации памяти сервера метрик
+
+В рамках оптимизации были проведены работы по улучшению управления памятью в сервере метрик. Основная цель — снизить потребление памяти и количество аллокаций при обработке HTTP-запросов и работе с базой данных.
+
+
+### 1. Оптимизация обработки шаблонов
+
+**Проблема:** При каждом запросе к `/` создавался новый HTML-шаблон, что приводило к излишним аллокациям.
+
+**Решение:** Шаблон был вынесен на уровень структуры `MetricsHandler` и парсится один раз при инициализации:
+
+```go
+// internal/server/handlers/serve.go
+
+type MetricsHandler struct {
+    // ...
+    tmpl *template.Template
+}
+
+func NewMetricsHandler(...) *MetricsHandler {
+    return &MetricsHandler{
+        // ...
+        tmpl: template.Must(template.New("metrics").Parse(metricsTemplate)),
+    }
+}
+```
+
+### 2. Оптимизация middleware сжатия
+
+**Проблема:** При каждом запросе с `Content-Encoding: gzip` создавался новый `gzip.Reader`, что приводило к множественным аллокациям внутренних буферов.
+
+**Решение:**
+- Добавлен `sync.Pool` для переиспользования `gzip.Reader`
+- Изменен уровень сжатия с `gzip.DefaultCompression` на `gzip.BestSpeed` для `gzip.Writer`
+
+```go
+// internal/server/middlewares/compress.go
+
+type CompressHandler struct {
+    logger     *zap.Logger
+    readerPool *sync.Pool
+}
+// ...
+func NewCompressHandler(logger *zap.Logger) *CompressHandler {
+    return &CompressHandler{
+        logger: logger,
+        readerPool: &sync.Pool{
+            New: func() interface{} {
+                reader, _ := gzip.NewReader(strings.NewReader(""))
+                return reader
+            },
+        },
+    }
+}
+// ...
+func newCompressWriter(w http.ResponseWriter) *compressWriter {
+    gzw, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
+    return &compressWriter{
+        w:   w,
+        gzw: gzw,
+    }
+}
+```
+
+
+### 3. Оптимизация работы с базой данных
+
+**Проблема:** При формировании SQL-запросов для батчевого обновления метрик слайсы для значений и аргументов объявлялись без предварительной аллокации с фиксированной емкостью.
+
+**Решение:** Добавлена преаллокация слайсов с известной емкостью (отдельно протестировано с помощью benchmark):
+
+```go
+// internal/server/repositories/db_storage.go
+
+func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error {
+	// ...
+	gauges := make([]models.Metrics, 0, len(gaugeMap))
+    // ...
+    counters := make([]models.Metrics, 0, len(counterMap))
+	// ...
+}
+//...
+func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.Metrics) error {
+    if len(gauges) > 0 {
+        values := make([]string, 0, len(gauges))
+        args := make([]any, 0, len(gauges)*2)
+        // ...
+    }
+// ...
+    if len(counters) > 0 {
+        values := make([]string, 0, len(counters))
+        args := make([]any, 0, len(counters)*2)
+        // ... 
+    }
+//...
+}
+```
+
+### 4. Оптимизация батчевой обработки метрик при большом количестве элементов
+
+**Проблема:** При большом количестве элементов для батчевого запроса к базе данных (более 1000) скорость обработки запросов снижалась (парсинг большего количества параметров запроса)
+
+**Решение:** Добавлена функция разделения больших батчей на части (чанки): 
+
+```go
+func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Metrics {
+    if chunkSize <= 0 {
+        chunkSize = defaultChunkSize
+    }
+    if len(items) == 0 {
+        return nil
+    }
+    chunks := make([][]models.Metrics, 0, len(items)/chunkSize+1)
+    for i := 0; i < len(items); i += chunkSize {
+        end := i + chunkSize
+        if end > len(items) {
+            end = len(items)
+        }
+        chunks = append(chunks, items[i:end])
+    }
+    return chunks
+}
+```
+
+### Итоговый результат оптимизаций:
+```
 File: server
 Type: inuse_space
 Time: 2025-10-20 01:28:21 MSK
@@ -100,3 +226,4 @@ Dropped 5 nodes (cum <= 40.62kB)
          0     0% 26.38% -1447.25kB 17.82%  text/template.(*Template).Execute (inline)
          0     0% 26.38% -1447.25kB 17.82%  text/template.(*Template).execute
          0     0% 26.38% -1447.25kB 17.82%  text/template.(*state).walk
+```

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -74,34 +75,50 @@ func (am *AuditManager) HasObservers() bool {
 	return len(am.observers) > 0
 }
 
-type FileAuditObserver struct {
-	filePath string
-	mu       *sync.Mutex
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
 }
 
-func NewFileAuditObserver(filePath string) *FileAuditObserver {
-	return &FileAuditObserver{
-		filePath: filePath,
-		mu:       &sync.Mutex{},
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
+
+type FileAuditObserver struct {
+	writer *lockedWriter
+	file   *os.File
+}
+
+func NewFileAuditObserver(filePath string) (*FileAuditObserver, error) {
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open audit file: %w", err)
 	}
+
+	return &FileAuditObserver{
+		writer: &lockedWriter{
+			mu: &sync.Mutex{},
+			w:  f,
+		},
+		file: f,
+	}, nil
+}
+
+func (fao *FileAuditObserver) Close() error {
+	fao.writer.mu.Lock()
+	defer fao.writer.mu.Unlock()
+	return fao.file.Close()
 }
 
 func (fao *FileAuditObserver) Notify(_ context.Context, event *models.AuditEvent) error {
-	fao.mu.Lock()
-	defer fao.mu.Unlock()
-
 	data, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal audit event: %w", err)
 	}
 
-	f, err := os.OpenFile(fao.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open audit file: %w", err)
-	}
-	defer f.Close()
-
-	if _, err = f.Write(append(data, '\n')); err != nil {
+	if _, err = fao.writer.Write(append(data, '\n')); err != nil {
 		return fmt.Errorf("failed to write audit event: %w", err)
 	}
 
