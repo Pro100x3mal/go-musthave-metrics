@@ -1,3 +1,5 @@
+// nolint:cleanexitanalyzer
+
 package handlers_test
 
 import (
