@@ -3,51 +3,63 @@ package handlers
 import (
 	"context"
 	"errors"
+	"html/template"
 	"net/http"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
+// MetricsServiceReader provides read-only operations for metrics retrieval.
 type MetricsServiceReader interface {
 	GetMetricValue(ctx context.Context, mType, mName string) (string, error)
 	GetJSONMetricValue(ctx context.Context, metric *models.Metrics) (*models.Metrics, error)
 	GetAllMetrics(ctx context.Context) (map[string]string, error)
 }
 
+// MetricsServiceWriter provides write operations for metrics updates.
 type MetricsServiceWriter interface {
 	UpdateMetricFromParams(ctx context.Context, mType, mName, mValue string) error
 	UpdateJSONMetric(ctx context.Context, metric *models.Metrics) error
 	UpdateJSONMetrics(ctx context.Context, metrics []models.Metrics) error
 }
 
+// MetricsServicePinger provides health check functionality for the underlying storage.
 type MetricsServicePinger interface {
 	PingCheck(ctx context.Context) error
 }
 
+// MetricsServiceInterface combines all metrics service capabilities.
 type MetricsServiceInterface interface {
 	MetricsServiceReader
 	MetricsServiceWriter
 	MetricsServicePinger
 }
 
+// MetricsHandler handles HTTP requests for metrics operations.
 type MetricsHandler struct {
-	reader MetricsServiceReader
-	writer MetricsServiceWriter
-	pinger MetricsServicePinger
-	logger *zap.Logger
-	cfg    *configs.ServerConfig
+	reader       MetricsServiceReader
+	writer       MetricsServiceWriter
+	pinger       MetricsServicePinger
+	logger       *zap.Logger
+	cfg          *configs.ServerConfig
+	auditManager audit.Publisher
+	tmpl         *template.Template
 }
 
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig) *MetricsHandler {
+// NewMetricsHandler creates a new MetricsHandler with the provided service, logger, configuration and audit manager.
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher) *MetricsHandler {
 	mh := &MetricsHandler{
-		reader: service,
-		writer: service,
-		logger: logger,
-		cfg:    cfg,
+		reader:       service,
+		writer:       service,
+		logger:       logger,
+		cfg:          cfg,
+		auditManager: auditManager,
+		tmpl:         template.Must(template.New("metrics").Parse(metricsTemplate)),
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {
@@ -56,6 +68,8 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg 
 	return mh
 }
 
+// StartServer starts the HTTP server and blocks until the context is cancelled or an error occurs.
+// It gracefully shuts down the server when the context is cancelled.
 func (mh *MetricsHandler) StartServer(ctx context.Context) error {
 	r := chi.NewRouter()
 	initRoutes(r, mh)

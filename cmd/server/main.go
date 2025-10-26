@@ -10,7 +10,8 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
-	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories/retry"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
@@ -35,14 +36,14 @@ func run() error {
 		return fmt.Errorf("failed to get config: %w", err)
 	}
 
-	logger, err := infrastructure.NewLogger(cfg)
+	zLog, err := logger.NewLogger(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer logger.Sync()
+	defer zLog.Sync()
 
-	mainLogger := logger.Named("main")
-	srvLogger := logger.Named("server")
+	mainLogger := zLog.Named("main")
+	srvLogger := zLog.Named("server")
 
 	mainLogger.Info("starting application")
 
@@ -51,16 +52,16 @@ func run() error {
 
 	switch {
 	case cfg.DatabaseDSN != "":
-		dbLogger := logger.Named("database")
+		dbLogger := zLog.Named("database")
 		dbRepo, err := repositories.NewDB(ctx, cfg, dbLogger)
 		if err != nil {
 			dbLogger.Error("failed to initialize database storage", zap.Error(err))
 			return err
 		}
 		defer dbRepo.Close()
-		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, time.Second)
+		repo = retry.NewRepoWithRetry(dbRepo, []time.Duration{}, 0)
 	case cfg.FileStoragePath != "":
-		fsLogger := logger.Named("file_storage")
+		fsLogger := zLog.Named("file_storage")
 		msRepo := repositories.NewMemStorage()
 		repo, err = repositories.NewFileStorage(ctx, cfg, msRepo, &wg, fsLogger)
 		if err != nil {
@@ -68,14 +69,40 @@ func run() error {
 			return err
 		}
 	default:
-		msLogger := logger.Named("memory_storage")
+		msLogger := zLog.Named("memory_storage")
 		msLogger.Info("initializing in-memory storage")
 		repo = repositories.NewMemStorage()
 		msLogger.Info("in-memory storage initialized successfully")
 	}
 
 	service := services.NewMetricsService(repo)
-	handler := handlers.NewMetricsHandler(service, srvLogger, cfg)
+
+	auditLogger := zLog.Named("audit")
+	auditManager := audit.NewAuditManager(auditLogger)
+
+	if cfg.AuditFile != "" {
+		fileObserver, err := audit.NewFileAuditObserver(cfg.AuditFile)
+		if err != nil {
+			auditLogger.Error("failed to initialize file audit observer", zap.Error(err))
+			return err
+		}
+		defer func(fileObserver *audit.FileAuditObserver) {
+			err := fileObserver.Close()
+			if err != nil {
+				auditLogger.Error("failed to close file audit observer", zap.Error(err))
+			}
+		}(fileObserver)
+		auditManager.Attach(fileObserver)
+		auditLogger.Info("file audit observer enabled", zap.String("file", cfg.AuditFile))
+	}
+
+	if cfg.AuditURL != "" {
+		httpObserver := audit.NewHTTPAuditObserver(cfg.AuditURL)
+		auditManager.Attach(httpObserver)
+		auditLogger.Info("HTTP audit observer enabled", zap.String("url", cfg.AuditURL))
+	}
+
+	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager)
 
 	if err = handler.StartServer(ctx); err != nil {
 		srvLogger.Error("server failed", zap.Error(err))

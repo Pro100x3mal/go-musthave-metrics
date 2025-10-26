@@ -7,10 +7,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// LoggerHandler provides HTTP request/response logging middleware.
 type LoggerHandler struct {
 	logger *zap.Logger
 }
 
+// NewLoggerHandler creates a new LoggerHandler with the provided logger.
 func NewLoggerHandler(logger *zap.Logger) *LoggerHandler {
 	return &LoggerHandler{
 		logger: logger,
@@ -52,6 +54,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
+// Middleware logs HTTP requests and responses including URL, method, status code, response size and duration.
 func (lh *LoggerHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

@@ -5,7 +5,9 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
@@ -17,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
+
+const defaultChunkSize = 100
 
 type DB struct {
 	pool *pgxpool.Pool
@@ -72,6 +76,12 @@ func initPool(ctx context.Context, cfg *configs.ServerConfig) (*pgxpool.Pool, er
 		return nil, fmt.Errorf("failed to parse database DSN %s: %w", cfg.DatabaseDSN, err)
 	}
 
+	poolCfg.MaxConns = 50
+	poolCfg.MinConns = 10
+	poolCfg.MaxConnLifetime = 1 * time.Hour
+	poolCfg.MaxConnIdleTime = 30 * time.Minute
+	poolCfg.HealthCheckPeriod = 1 * time.Minute
+
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize a connection pool: %w", err)
@@ -117,7 +127,8 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 			counterMap[m.ID] += *m.Delta
 		}
 	}
-	var gauges, counters []models.Metrics
+
+	gauges := make([]models.Metrics, 0, len(gaugeMap))
 	for id, v := range gaugeMap {
 		value := v
 		gauges = append(gauges, models.Metrics{
@@ -126,6 +137,8 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 			MType: models.Gauge,
 		})
 	}
+
+	counters := make([]models.Metrics, 0, len(counterMap))
 	for id, d := range counterMap {
 		delta := d
 		counters = append(counters, models.Metrics{
@@ -135,6 +148,57 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 		})
 	}
 
+	sort.Slice(gauges, func(i, j int) bool {
+		return gauges[i].ID < gauges[j].ID
+	})
+
+	sort.Slice(counters, func(i, j int) bool {
+		return counters[i].ID < counters[j].ID
+	})
+
+	gaugeChunks := splitMetricsIntoChunks(gauges, defaultChunkSize)
+	counterChunks := splitMetricsIntoChunks(counters, defaultChunkSize)
+
+	for i, chunk := range gaugeChunks {
+		if err := db.updateMetricsChunk(ctx, chunk, nil); err != nil {
+			return fmt.Errorf("failed to update gauge chunk %d/%d: %w", i+1, len(gaugeChunks), err)
+		}
+	}
+
+	for i, chunk := range counterChunks {
+		if err := db.updateMetricsChunk(ctx, nil, chunk); err != nil {
+			return fmt.Errorf("failed to update counter chunk %d/%d: %w", i+1, len(counterChunks), err)
+		}
+	}
+
+	return nil
+}
+
+func splitMetricsIntoChunks(items []models.Metrics, chunkSize int) [][]models.Metrics {
+	if chunkSize <= 0 {
+		chunkSize = defaultChunkSize
+	}
+
+	if len(items) == 0 {
+		return nil
+	}
+
+	chunks := make([][]models.Metrics, 0, len(items)/chunkSize+1)
+	for i := 0; i < len(items); i += chunkSize {
+		end := i + chunkSize
+		if end > len(items) {
+			end = len(items)
+		}
+		chunks = append(chunks, items[i:end])
+	}
+	return chunks
+}
+
+func (db *DB) updateMetricsChunk(ctx context.Context, gauges, counters []models.Metrics) error {
+	if len(gauges) == 0 && len(counters) == 0 {
+		return nil
+	}
+
 	tx, err := db.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -142,8 +206,8 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	defer tx.Rollback(ctx)
 
 	if len(gauges) > 0 {
-		var values []string
-		var args []any
+		values := make([]string, 0, len(gauges))
+		args := make([]any, 0, len(gauges)*2)
 		for i, m := range gauges {
 			base := i * 2
 			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)
@@ -163,8 +227,8 @@ func (db *DB) UpdateMetrics(ctx context.Context, metrics []models.Metrics) error
 	}
 
 	if len(counters) > 0 {
-		var values []string
-		var args []any
+		values := make([]string, 0, len(counters))
+		args := make([]any, 0, len(counters)*2)
 		for i, m := range counters {
 			base := i * 2
 			params := fmt.Sprintf("($%d, $%d)", base+1, base+2)

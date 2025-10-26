@@ -24,3 +24,5 @@ vendor/
 /cmd/server/server
 /.github/workflows/run_tests.txt
 /.env
+/audit.json
+/report.txt

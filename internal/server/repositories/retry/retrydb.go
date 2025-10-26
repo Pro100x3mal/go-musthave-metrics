@@ -28,7 +28,7 @@ func NewRepoWithRetry(inner repositories.Repository, intervals []time.Duration, 
 	}
 
 	if attemptTimeout <= 0 {
-		attemptTimeout = 3 * time.Second
+		attemptTimeout = 5 * time.Second
 	}
 
 	return &RepoWithRetry{
