@@ -16,9 +16,21 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
 	mainLogger := zap.NewExample()
 	defer mainLogger.Sync()
+
+	mainLogger.Info("starting application",
+		zap.String("build version", buildVersion),
+		zap.String("build date", buildDate),
+		zap.String("build commit", buildCommit),
+	)
 
 	if err := run(); err != nil {
 		mainLogger.Fatal("application failed:", zap.Error(err))
