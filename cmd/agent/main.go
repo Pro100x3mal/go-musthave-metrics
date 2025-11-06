@@ -11,15 +11,10 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/infrastructure"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
 	"go.uber.org/zap"
-)
-
-var (
-	buildVersion = "N/A"
-	buildDate    = "N/A"
-	buildCommit  = "N/A"
 )
 
 func main() {
@@ -27,9 +22,9 @@ func main() {
 	defer mainLogger.Sync()
 
 	mainLogger.Info("starting application",
-		zap.String("build version", buildVersion),
-		zap.String("build date", buildDate),
-		zap.String("build commit", buildCommit),
+		zap.String("build version", models.BuildVersion),
+		zap.String("build date", models.BuildDate),
+		zap.String("build commit", models.BuildCommit),
 	)
 
 	if err := run(); err != nil {

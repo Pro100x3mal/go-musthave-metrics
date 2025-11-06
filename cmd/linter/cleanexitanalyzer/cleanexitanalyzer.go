@@ -7,6 +7,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+const pkgName = "main"
+
 func NewAnalyzer() *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: "cleanexitanalyzer",
@@ -16,13 +18,18 @@ func NewAnalyzer() *analysis.Analyzer {
 }
 
 func run(pass *analysis.Pass) (interface{}, error) {
-	for _, file := range pass.Files {
-		inMainPackage := pass.Pkg.Name() == "main"
+	inMainPackage := pass.Pkg.Name() == pkgName
 
+	mainFuncs := collectMainFunctions(pass)
+
+	for _, file := range pass.Files {
+		nolintLines := make(map[int]bool)
 		for _, cg := range file.Comments {
 			for _, c := range cg.List {
 				if strings.Contains(c.Text, "nolint:cleanexitanalyzer") {
-					return nil, nil
+					line := pass.Fset.Position(c.Pos()).Line
+					nolintLines[line] = true
+					nolintLines[line+1] = true // nolint может быть на предыдущей строке
 				}
 			}
 		}
@@ -33,8 +40,13 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				return true
 			}
 
+			line := pass.Fset.Position(call.Pos()).Line
+			if nolintLines[line] {
+				return true
+			}
+
 			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "panic" {
-				if !(inMainPackage && isInsideMainFunc(pass, call)) {
+				if !(inMainPackage && isInsideMainFunc(mainFuncs, call)) {
 					pass.Reportf(call.Pos(), "use of panic detected")
 				}
 				return true
@@ -46,11 +58,11 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					if pkg != nil {
 						switch pkg.Path() {
 						case "log":
-							if sel.Sel.Name == "Fatal" && !(inMainPackage && isInsideMainFunc(pass, call)) {
+							if sel.Sel.Name == "Fatal" && !(inMainPackage && isInsideMainFunc(mainFuncs, call)) {
 								pass.Reportf(call.Pos(), "log.Fatal used outside main.main")
 							}
 						case "os":
-							if sel.Sel.Name == "Exit" && !(inMainPackage && isInsideMainFunc(pass, call)) {
+							if sel.Sel.Name == "Exit" && !(inMainPackage && isInsideMainFunc(mainFuncs, call)) {
 								pass.Reportf(call.Pos(), "os.Exit used outside main.main")
 							}
 						}
@@ -64,16 +76,23 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func isInsideMainFunc(pass *analysis.Pass, call *ast.CallExpr) bool {
+func collectMainFunctions(pass *analysis.Pass) []*ast.FuncDecl {
+	var mainFuncs []*ast.FuncDecl
 	for _, f := range pass.Files {
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "main" {
-				continue
+			if ok && fn.Name.Name == pkgName {
+				mainFuncs = append(mainFuncs, fn)
 			}
-			if call.Pos() >= fn.Pos() && call.Pos() <= fn.End() {
-				return true
-			}
+		}
+	}
+	return mainFuncs
+}
+
+func isInsideMainFunc(mainFuncs []*ast.FuncDecl, call *ast.CallExpr) bool {
+	for _, fn := range mainFuncs {
+		if call.Pos() >= fn.Pos() && call.Pos() <= fn.End() {
+			return true
 		}
 	}
 	return false

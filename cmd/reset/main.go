@@ -51,8 +51,15 @@ var tmpl = template.Must(template.New("reset").Funcs(template.FuncMap{
 }).Parse(tmplText))
 
 func main() {
-	root := "."
+	pkgs, err := collectPackages(".")
+	if err != nil {
+		log.Fatalf("collect packages: %v", err)
+	}
 
+	generateResetFiles(pkgs)
+}
+
+func collectPackages(root string) (map[string]*pkgInfo, error) {
 	pkgs := map[string]*pkgInfo{}
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -60,110 +67,161 @@ func main() {
 			return err
 		}
 
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !shouldProcessFile(path) {
 			return nil
 		}
 
-		fset := token.NewFileSet()
-		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		pkg, err := processFile(path, pkgs)
 		if err != nil {
 			return err
 		}
 
-		dir := filepath.Dir(path)
-		pkg, ok := pkgs[dir]
-		if !ok {
-			pkg = &pkgInfo{Package: file.Name.Name}
+		if pkg != nil {
+			dir := filepath.Dir(path)
 			pkgs[dir] = pkg
-		}
-
-		for _, decl := range file.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-
-			hasTag := false
-			if genDecl.Doc != nil {
-				for _, c := range genDecl.Doc.List {
-					if strings.Contains(c.Text, "generate:reset") {
-						hasTag = true
-						break
-					}
-				}
-			}
-			if !hasTag {
-				continue
-			}
-
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				structType, ok := typeSpec.Type.(*ast.StructType)
-				if !ok {
-					continue
-				}
-
-				var fields []resetField
-				if structType.Fields != nil {
-					for _, field := range structType.Fields.List {
-						if len(field.Names) == 0 {
-							continue
-						}
-						for _, nameIdent := range field.Names {
-							fields = append(fields, resetField{
-								Name: nameIdent.Name,
-								Expr: field.Type,
-							})
-						}
-					}
-				}
-
-				pkg.Structs = append(pkg.Structs, resetStruct{
-					Name:   typeSpec.Name.Name,
-					Fields: fields,
-				})
-			}
 		}
 
 		return nil
 	})
 
+	return pkgs, err
+}
+
+func shouldProcessFile(path string) bool {
+	return strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go")
+}
+
+func processFile(path string, pkgs map[string]*pkgInfo) (*pkgInfo, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 	if err != nil {
-		log.Fatalf("walk error: %v", err)
+		return nil, err
 	}
 
+	dir := filepath.Dir(path)
+	pkg, ok := pkgs[dir]
+	if !ok {
+		pkg = &pkgInfo{Package: file.Name.Name}
+	}
+
+	structs := extractResetStructs(file)
+	pkg.Structs = append(pkg.Structs, structs...)
+
+	return pkg, nil
+}
+
+func extractResetStructs(file *ast.File) []resetStruct {
+	var structs []resetStruct
+
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		if !hasResetTag(genDecl) {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			if s := extractStructFromSpec(spec); s != nil {
+				structs = append(structs, *s)
+			}
+		}
+	}
+
+	return structs
+}
+
+func hasResetTag(genDecl *ast.GenDecl) bool {
+	if genDecl.Doc == nil {
+		return false
+	}
+	for _, c := range genDecl.Doc.List {
+		if strings.Contains(c.Text, "generate:reset") {
+			return true
+		}
+	}
+	return false
+}
+
+func extractStructFromSpec(spec ast.Spec) *resetStruct {
+	typeSpec, ok := spec.(*ast.TypeSpec)
+	if !ok {
+		return nil
+	}
+
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		return nil
+	}
+
+	fields := extractFields(structType)
+
+	return &resetStruct{
+		Name:   typeSpec.Name.Name,
+		Fields: fields,
+	}
+}
+
+func extractFields(structType *ast.StructType) []resetField {
+	var fields []resetField
+
+	if structType.Fields == nil {
+		return fields
+	}
+
+	for _, field := range structType.Fields.List {
+		if len(field.Names) == 0 {
+			continue
+		}
+		for _, nameIdent := range field.Names {
+			fields = append(fields, resetField{
+				Name: nameIdent.Name,
+				Expr: field.Type,
+			})
+		}
+	}
+
+	return fields
+}
+
+func generateResetFiles(pkgs map[string]*pkgInfo) {
 	for dir, info := range pkgs {
 		if len(info.Structs) == 0 {
 			continue
 		}
 
-		data := map[string]interface{}{
-			"Package": info.Package,
-			"Structs": info.Structs,
+		if err := generateResetFile(dir, info); err != nil {
+			log.Printf("generate %s: %v", dir, err)
+		} else {
+			log.Printf("Generated: %s/reset.gen.go", dir)
 		}
-
-		buf := &bytes.Buffer{}
-		if err := tmpl.Execute(buf, data); err != nil {
-			log.Printf("template exec: %v", err)
-			continue
-		}
-
-		formatted, err := format.Source(buf.Bytes())
-		if err != nil {
-			log.Printf("format error for %s: %v\n", dir, err)
-			continue
-		}
-
-		outFile := filepath.Join(dir, "reset.gen.go")
-		if err = os.WriteFile(outFile, formatted, 0644); err != nil {
-			log.Printf("write %s: %v", outFile, err)
-			continue
-		}
-		log.Println("Generated:", outFile)
 	}
+}
+
+func generateResetFile(dir string, info *pkgInfo) error {
+	data := map[string]interface{}{
+		"Package": info.Package,
+		"Structs": info.Structs,
+	}
+
+	buf := &bytes.Buffer{}
+	if err := tmpl.Execute(buf, data); err != nil {
+		return fmt.Errorf("template exec: %w", err)
+	}
+
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("format: %w", err)
+	}
+
+	outFile := filepath.Join(dir, "reset.gen.go")
+	if err := os.WriteFile(outFile, formatted, 0644); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+
+	return nil
 }
 
 func genResetForExpr(receiverExpr string, expr ast.Expr) string {
