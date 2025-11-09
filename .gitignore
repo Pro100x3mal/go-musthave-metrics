@@ -22,6 +22,7 @@ vendor/
 /metricstest
 /cmd/agent/agent
 /cmd/server/server
+/cmd/linter/linter
 /.github/workflows/run_tests.txt
 /.env
 /audit.json

@@ -5,47 +5,36 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"go.uber.org/zap"
 )
 
 // CompressHandler provides HTTP compression middleware.
 type CompressHandler struct {
-	logger     *zap.Logger
-	readerPool *sync.Pool
+	logger *zap.Logger
 }
 
 // NewCompressHandler creates a new CompressHandler with the provided logger.
 func NewCompressHandler(logger *zap.Logger) *CompressHandler {
 	return &CompressHandler{
 		logger: logger,
-		readerPool: &sync.Pool{
-			New: func() interface{} {
-				reader, _ := gzip.NewReader(strings.NewReader(""))
-				return reader
-			},
-		},
 	}
 }
 
 type compressReader struct {
-	r    io.ReadCloser
-	gzr  *gzip.Reader
-	pool *sync.Pool
+	r   io.ReadCloser
+	gzr *gzip.Reader
 }
 
-func (ch *CompressHandler) newCompressReader(r io.ReadCloser) (*compressReader, error) {
-	gzr := ch.readerPool.Get().(*gzip.Reader)
-	if err := gzr.Reset(r); err != nil {
-		ch.readerPool.Put(gzr)
+func newCompressReader(r io.ReadCloser) (*compressReader, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
 		return nil, err
 	}
 
 	return &compressReader{
-		r:    r,
-		gzr:  gzr,
-		pool: ch.readerPool,
+		r:   r,
+		gzr: gzr,
 	}, nil
 }
 
@@ -54,12 +43,10 @@ func (cr *compressReader) Read(p []byte) (n int, err error) {
 }
 
 func (cr *compressReader) Close() error {
-	if err := cr.gzr.Close(); err != nil {
-		cr.pool.Put(cr.gzr)
+	if err := cr.r.Close(); err != nil {
 		return err
 	}
-	cr.pool.Put(cr.gzr)
-	return cr.r.Close()
+	return cr.gzr.Close()
 }
 
 type compressWriter struct {
@@ -124,7 +111,7 @@ func (cw *compressWriter) Close() error {
 func (ch *CompressHandler) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			cr, err := ch.newCompressReader(r.Body)
+			cr, err := newCompressReader(r.Body)
 			if err != nil {
 				ch.logger.Error("compression error", zap.Error(err))
 				w.WriteHeader(http.StatusInternalServerError)

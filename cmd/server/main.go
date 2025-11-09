@@ -12,6 +12,7 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories/retry"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
@@ -21,6 +22,12 @@ import (
 func main() {
 	mainLogger := zap.NewExample()
 	defer mainLogger.Sync()
+
+	mainLogger.Info("starting application",
+		zap.String("build version", models.BuildVersion),
+		zap.String("build date", models.BuildDate),
+		zap.String("build commit", models.BuildCommit),
+	)
 
 	if err := run(); err != nil {
 		mainLogger.Fatal("application failed:", zap.Error(err))
