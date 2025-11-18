@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/rsa"
 	"errors"
 	"html/template"
 	"net/http"
@@ -49,10 +50,11 @@ type MetricsHandler struct {
 	cfg          *configs.ServerConfig
 	auditManager audit.Publisher
 	tmpl         *template.Template
+	privateKey   *rsa.PrivateKey
 }
 
 // NewMetricsHandler creates a new MetricsHandler with the provided service, logger, configuration and audit manager.
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher, privateKey *rsa.PrivateKey) *MetricsHandler {
 	mh := &MetricsHandler{
 		reader:       service,
 		writer:       service,
@@ -60,6 +62,7 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg 
 		cfg:          cfg,
 		auditManager: auditManager,
 		tmpl:         template.Must(template.New("metrics").Parse(metricsTemplate)),
+		privateKey:   privateKey,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {

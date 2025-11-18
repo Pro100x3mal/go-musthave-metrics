@@ -15,6 +15,7 @@ type AgentConfig struct {
 	LogLevel       string
 	Key            string
 	RateLimit      int
+	PublicKeyPath  string
 }
 
 func GetConfig() (*AgentConfig, error) {
@@ -29,6 +30,7 @@ func GetConfig() (*AgentConfig, error) {
 	flag.StringVar(&cfg.LogLevel, "log-level", "info", "log level")
 	flag.StringVar(&cfg.Key, "k", "", "signing key")
 	flag.IntVar(&cfg.RateLimit, "l", 5, "report rate limit")
+	flag.StringVar(&cfg.PublicKeyPath, "crypto-key", "", "path to public key file")
 	flag.Parse()
 
 	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
@@ -68,6 +70,10 @@ func GetConfig() (*AgentConfig, error) {
 			return nil, fmt.Errorf("failed to parse RATE_LIMIT value %q to integer: %w", envRateLimit, err)
 		}
 		cfg.RateLimit = envRateLimit
+	}
+
+	if envPublicKeyPath, ok := os.LookupEnv("CRYPTO_KEY"); ok && envPublicKeyPath != "" {
+		cfg.PublicKeyPath = envPublicKeyPath
 	}
 
 	return &cfg, nil

@@ -18,6 +18,7 @@ type ServerConfig struct {
 	Key             string
 	AuditFile       string
 	AuditURL        string
+	PrivateKeyPath  string
 }
 
 func GetConfig() (*ServerConfig, error) {
@@ -35,6 +36,7 @@ func GetConfig() (*ServerConfig, error) {
 	flag.StringVar(&cfg.Key, "k", "", "signing key")
 	flag.StringVar(&cfg.AuditFile, "audit-file", "audit.json", "path to audit log file")
 	flag.StringVar(&cfg.AuditURL, "audit-url", "", "URL for audit log server")
+	flag.StringVar(&cfg.PrivateKeyPath, "crypto-key", "", "path to private key file")
 
 	flag.Parse()
 
@@ -84,6 +86,10 @@ func GetConfig() (*ServerConfig, error) {
 
 	if envAuditURL, ok := os.LookupEnv("AUDIT_URL"); ok && envAuditURL != "" {
 		cfg.AuditURL = envAuditURL
+	}
+
+	if envPrivateKeyPath, ok := os.LookupEnv("CRYPTO_KEY"); ok && envPrivateKeyPath != "" {
+		cfg.PrivateKeyPath = envPrivateKeyPath
 	}
 
 	return &cfg, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"os/signal"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories/retry"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/services"
+	"github.com/Pro100x3mal/go-musthave-metrics/pkg/crypto"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +55,16 @@ func run() error {
 	srvLogger := zLog.Named("server")
 
 	mainLogger.Info("starting application")
+
+	var privateKey *rsa.PrivateKey
+	if cfg.PrivateKeyPath != "" {
+		privateKey, err = crypto.LoadPrivateKey(cfg.PrivateKeyPath)
+		if err != nil {
+			mainLogger.Error("failed to load private key", zap.Error(err))
+			return err
+		}
+		mainLogger.Info("private key loaded successfully")
+	}
 
 	var repo repositories.Repository
 	var wg sync.WaitGroup
@@ -109,7 +121,7 @@ func run() error {
 		auditLogger.Info("HTTP audit observer enabled", zap.String("url", cfg.AuditURL))
 	}
 
-	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager)
+	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey)
 
 	if err = handler.StartServer(ctx); err != nil {
 		srvLogger.Error("server failed", zap.Error(err))

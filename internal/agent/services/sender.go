@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
+	"github.com/Pro100x3mal/go-musthave-metrics/pkg/crypto"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -36,7 +38,7 @@ type Client struct {
 	client *resty.Client
 }
 
-func NewClient(cfg *configs.AgentConfig) *Client {
+func NewClient(cfg *configs.AgentConfig, publicKey *rsa.PublicKey) *Client {
 	c := resty.New().
 		SetBaseURL("http://" + cfg.ServerAddr).
 		SetTimeout(10 * time.Second).
@@ -45,12 +47,20 @@ func NewClient(cfg *configs.AgentConfig) *Client {
 		SetRetryMaxWaitTime(5 * time.Second)
 
 	c.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
-		if cfg.Key == "" {
-			return nil
-		}
-
 		if body, ok := r.Body.([]byte); ok && len(body) > 0 {
-			r.SetHeader("HashSHA256", signBody(body, cfg.Key))
+			var err error
+
+			if publicKey != nil {
+				body, err = crypto.Encrypt(publicKey, body)
+				if err != nil {
+					return fmt.Errorf("failed to encrypt request body: %w", err)
+				}
+				r.SetBody(body)
+			}
+
+			if cfg.Key != "" {
+				r.SetHeader("HashSHA256", signBody(body, cfg.Key))
+			}
 		}
 		return nil
 	})

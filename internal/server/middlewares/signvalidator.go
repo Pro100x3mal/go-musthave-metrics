@@ -79,7 +79,7 @@ func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 				http.Error(w, "Failed to read request body", http.StatusBadRequest)
 				return
 			}
-			r.Body = io.NopCloser(bytes.NewReader(body))
+			_ = r.Body.Close()
 
 			expectedHMAC := signBody(body, sh.key)
 			receivedHMAC, err := hex.DecodeString(receivedHMACStr)
@@ -92,6 +92,7 @@ func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 				http.Error(w, "Invalid signature", http.StatusBadRequest)
 				return
 			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
 		}
 		srw := newSignResponseWriter(w)
 
