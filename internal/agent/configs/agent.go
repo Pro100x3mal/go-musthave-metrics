@@ -1,6 +1,7 @@
 package configs
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -18,20 +19,91 @@ type AgentConfig struct {
 	PublicKeyPath  string
 }
 
+type JSONAgentConfig struct {
+	PollInterval   string `json:"poll_interval"`
+	ReportInterval string `json:"report_interval"`
+	ServerAddr     string `json:"address"`
+	LogLevel       string `json:"log_level"`
+	Key            string `json:"signing_key"`
+	RateLimit      *int   `json:"rate_limit"`
+	PublicKeyPath  string `json:"crypto_key"`
+}
+
+const (
+	defaultServerAddr = "localhost:8080"
+	defaultLogLevel   = "info"
+	defaultRateLimit  = 5
+	defaultPollSec    = 2
+	defaultReportSec  = 10
+)
+
 func GetConfig() (*AgentConfig, error) {
 	var (
 		pollSec, reportSec int
 		cfg                AgentConfig
+		configFilePath     string
 	)
 
-	flag.StringVar(&cfg.ServerAddr, "a", "localhost:8080", "address of HTTP server")
-	flag.IntVar(&pollSec, "p", 2, "polling interval in seconds")
-	flag.IntVar(&reportSec, "r", 10, "reporting interval in seconds")
-	flag.StringVar(&cfg.LogLevel, "log-level", "info", "log level")
-	flag.StringVar(&cfg.Key, "k", "", "signing key")
-	flag.IntVar(&cfg.RateLimit, "l", 5, "report rate limit")
-	flag.StringVar(&cfg.PublicKeyPath, "crypto-key", "", "path to public key file")
+	cfg.ServerAddr = defaultServerAddr
+	cfg.LogLevel = defaultLogLevel
+	cfg.RateLimit = defaultRateLimit
+	pollSec = defaultPollSec
+	reportSec = defaultReportSec
+
+	var (
+		flagPollInterval   int
+		flagReportInterval int
+		flagServerAddr     string
+		flagLogLevel       string
+		flagKey            string
+		flagRateLimit      int
+		flagPublicKeyPath  string
+	)
+
+	flag.StringVar(&flagServerAddr, "a", "", "address of HTTP server")
+	flag.IntVar(&flagPollInterval, "p", -1, "polling interval in seconds")
+	flag.IntVar(&flagReportInterval, "r", -1, "reporting interval in seconds")
+	flag.StringVar(&flagLogLevel, "log-level", "", "log level")
+	flag.StringVar(&flagKey, "k", "", "signing key")
+	flag.IntVar(&flagRateLimit, "l", -1, "report rate limit")
+	flag.StringVar(&flagPublicKeyPath, "crypto-key", "", "path to public key file")
+	flag.StringVar(&configFilePath, "config", "", "path to JSON config file")
+	flag.StringVar(&configFilePath, "c", "", "path to JSON config file")
 	flag.Parse()
+
+	if configFilePath == "" {
+		if envConfigFilePath, ok := os.LookupEnv("CONFIG"); ok && envConfigFilePath != "" {
+			configFilePath = envConfigFilePath
+		}
+	}
+
+	if configFilePath != "" {
+		if err := loadJSONConfig(configFilePath, &cfg, &pollSec, &reportSec); err != nil {
+			return nil, fmt.Errorf("failed to load JSON config: %w", err)
+		}
+	}
+
+	if flagServerAddr != "" {
+		cfg.ServerAddr = flagServerAddr
+	}
+	if flagLogLevel != "" {
+		cfg.LogLevel = flagLogLevel
+	}
+	if flagPollInterval >= 0 {
+		pollSec = flagPollInterval
+	}
+	if flagReportInterval >= 0 {
+		reportSec = flagReportInterval
+	}
+	if flagKey != "" {
+		cfg.Key = flagKey
+	}
+	if flagRateLimit >= 0 {
+		cfg.RateLimit = flagRateLimit
+	}
+	if flagPublicKeyPath != "" {
+		cfg.PublicKeyPath = flagPublicKeyPath
+	}
 
 	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
 		cfg.ServerAddr = envServerAddr
@@ -57,9 +129,6 @@ func GetConfig() (*AgentConfig, error) {
 		reportSec = envReportSecInt
 	}
 
-	cfg.PollInterval = time.Duration(pollSec) * time.Second
-	cfg.ReportInterval = time.Duration(reportSec) * time.Second
-
 	if envKey, ok := os.LookupEnv("KEY"); ok && envKey != "" {
 		cfg.Key = envKey
 	}
@@ -76,5 +145,54 @@ func GetConfig() (*AgentConfig, error) {
 		cfg.PublicKeyPath = envPublicKeyPath
 	}
 
+	cfg.PollInterval = time.Duration(pollSec) * time.Second
+	cfg.ReportInterval = time.Duration(reportSec) * time.Second
+
 	return &cfg, nil
+}
+
+func loadJSONConfig(path string, cfg *AgentConfig, pollSec *int, reportSec *int) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var jsonCfg JSONAgentConfig
+	if err = json.Unmarshal(data, &jsonCfg); err != nil {
+		return fmt.Errorf("failed to parse JSON config: %w", err)
+	}
+
+	if jsonCfg.ServerAddr != "" {
+		cfg.ServerAddr = jsonCfg.ServerAddr
+	}
+	if jsonCfg.LogLevel != "" {
+		cfg.LogLevel = jsonCfg.LogLevel
+	}
+	if jsonCfg.PollInterval != "" {
+		duration, err := time.ParseDuration(jsonCfg.PollInterval)
+		if err != nil {
+			return fmt.Errorf("failed to parse poll_interval: %w", err)
+		}
+		cfg.PollInterval = duration
+		*pollSec = int(duration.Seconds())
+	}
+	if jsonCfg.ReportInterval != "" {
+		duration, err := time.ParseDuration(jsonCfg.ReportInterval)
+		if err != nil {
+			return fmt.Errorf("failed to parse report_interval: %w", err)
+		}
+		cfg.ReportInterval = duration
+		*reportSec = int(duration.Seconds())
+	}
+	if jsonCfg.PublicKeyPath != "" {
+		cfg.PublicKeyPath = jsonCfg.PublicKeyPath
+	}
+	if jsonCfg.Key != "" {
+		cfg.Key = jsonCfg.Key
+	}
+	if jsonCfg.RateLimit != nil {
+		cfg.RateLimit = *jsonCfg.RateLimit
+	}
+
+	return nil
 }
