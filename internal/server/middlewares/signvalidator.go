@@ -73,6 +73,7 @@ func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if receivedHMACStr := r.Header.Get("HashSHA256"); receivedHMACStr != "" {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				sh.logger.Error("failed to read request body", zap.Error(err))

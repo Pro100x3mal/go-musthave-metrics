@@ -48,18 +48,17 @@ func NewClient(cfg *configs.AgentConfig, publicKey *rsa.PublicKey) *Client {
 
 	c.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
 		if body, ok := r.Body.([]byte); ok && len(body) > 0 {
-			var err error
+			newBody, hash, err := prepareRequestData(body, publicKey, cfg.Key)
+			if err != nil {
+				return err
+			}
 
 			if publicKey != nil {
-				body, err = crypto.Encrypt(publicKey, body)
-				if err != nil {
-					return fmt.Errorf("failed to encrypt request body: %w", err)
-				}
-				r.SetBody(body)
+				r.SetBody(newBody)
 			}
 
 			if cfg.Key != "" {
-				r.SetHeader("HashSHA256", signBody(body, cfg.Key))
+				r.SetHeader("HashSHA256", hash)
 			}
 		}
 		return nil
@@ -101,6 +100,22 @@ func (qs *MetricsQueryService) SendMetrics(ctx context.Context, c *Client) error
 	}
 
 	return nil
+}
+func prepareRequestData(body []byte, publicKey *rsa.PublicKey, key string) ([]byte, string, error) {
+	if publicKey != nil {
+		var err error
+		body, err = crypto.Encrypt(publicKey, body)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to encrypt request body: %w", err)
+		}
+	}
+
+	var hash string
+	if key != "" {
+		hash = signBody(body, key)
+	}
+
+	return body, hash, nil
 }
 
 func signBody(body []byte, key string) string {

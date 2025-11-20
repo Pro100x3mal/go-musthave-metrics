@@ -29,6 +29,7 @@ func (dh *DecryptHandler) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			dh.logger.Error("failed to read request body", zap.Error(err))
