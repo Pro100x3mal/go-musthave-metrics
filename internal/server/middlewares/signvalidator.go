@@ -73,13 +73,14 @@ func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if receivedHMACStr := r.Header.Get("HashSHA256"); receivedHMACStr != "" {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				sh.logger.Error("failed to read request body", zap.Error(err))
 				http.Error(w, "Failed to read request body", http.StatusBadRequest)
 				return
 			}
-			r.Body = io.NopCloser(bytes.NewReader(body))
+			_ = r.Body.Close()
 
 			expectedHMAC := signBody(body, sh.key)
 			receivedHMAC, err := hex.DecodeString(receivedHMACStr)
@@ -92,6 +93,7 @@ func (sh *SignHandler) Middleware(next http.Handler) http.Handler {
 				http.Error(w, "Invalid signature", http.StatusBadRequest)
 				return
 			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
 		}
 		srw := newSignResponseWriter(w)
 

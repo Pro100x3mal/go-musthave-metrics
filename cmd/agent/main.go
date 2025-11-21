@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
+	"github.com/Pro100x3mal/go-musthave-metrics/pkg/crypto"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +35,7 @@ func main() {
 }
 
 func run() error {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancel()
 
 	cfg, err := configs.GetConfig()
@@ -51,7 +53,17 @@ func run() error {
 	collectService := services.NewMetricsCollectService(repo)
 	queryService := services.NewMetricsQueryService(repo)
 
-	newClient := services.NewClient(cfg)
+	var publicKey *rsa.PublicKey
+	if cfg.PublicKeyPath != "" {
+		publicKey, err = crypto.LoadPublicKey(cfg.PublicKeyPath)
+		if err != nil {
+			logger.Error("failed to load public key", zap.Error(err))
+			return err
+		}
+		logger.Info("public key loaded successfully")
+	}
+
+	newClient := services.NewClient(cfg, publicKey)
 	pool := services.NewWorkerPool(cfg)
 	pool.Start()
 

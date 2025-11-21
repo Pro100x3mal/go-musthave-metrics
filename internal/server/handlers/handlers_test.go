@@ -37,7 +37,7 @@ func setupTestHandler(t *testing.T, setupMock func(*mocksvc.MockMetricsServiceIn
 	zl := zap.NewNop()
 	cfg := &configs.ServerConfig{}
 	mockAud := &mockAuditManager{}
-	handler := NewMetricsHandler(mockService, zl, cfg, mockAud)
+	handler := NewMetricsHandler(mockService, zl, cfg, mockAud, nil)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)
