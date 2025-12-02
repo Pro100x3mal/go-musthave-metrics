@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"net"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -66,6 +67,16 @@ func run() error {
 		mainLogger.Info("private key loaded successfully")
 	}
 
+	var trustedSubnet *net.IPNet
+	if cfg.TrustedSubnet != "" {
+		_, trustedSubnet, err = net.ParseCIDR(cfg.TrustedSubnet)
+		if err != nil {
+			mainLogger.Error("failed to parse trusted subnet", zap.Error(err), zap.String("subnet", cfg.TrustedSubnet))
+			return fmt.Errorf("invalid trusted subnet: %w", err)
+		}
+		mainLogger.Info("trusted subnet configured", zap.String("subnet", cfg.TrustedSubnet))
+	}
+
 	var repo repositories.Repository
 	var wg sync.WaitGroup
 
@@ -121,7 +132,7 @@ func run() error {
 		auditLogger.Info("HTTP audit observer enabled", zap.String("url", cfg.AuditURL))
 	}
 
-	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey)
+	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, trustedSubnet)
 
 	if err = handler.StartServer(ctx); err != nil {
 		srvLogger.Error("server failed", zap.Error(err))

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -47,6 +48,10 @@ func NewClient(cfg *configs.AgentConfig, publicKey *rsa.PublicKey) *Client {
 		SetRetryMaxWaitTime(5 * time.Second)
 
 	c.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
+		if realIP := getOutboundIP(); realIP != "" {
+			r.SetHeader("X-Real-IP", realIP)
+		}
+
 		if body, ok := r.Body.([]byte); ok && len(body) > 0 {
 			newBody, hash, err := prepareRequestData(body, publicKey, cfg.Key)
 			if err != nil {
@@ -163,4 +168,21 @@ func (p *WorkerPool) Submit(t Task) {
 func (p *WorkerPool) Stop() {
 	close(p.queue)
 	p.wg.Wait()
+}
+
+func getOutboundIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+
+	return ""
 }
