@@ -37,7 +37,7 @@ func setupTestServer() *httptest.Server {
 	log, _ := logger.NewLogger(cfg)
 
 	// Create handler
-	handler := handlers.NewMetricsHandler(service, log, cfg, nil, nil)
+	handler := handlers.NewMetricsHandler(service, log, cfg, nil, nil, nil)
 
 	// Setup router
 	r := chi.NewRouter()

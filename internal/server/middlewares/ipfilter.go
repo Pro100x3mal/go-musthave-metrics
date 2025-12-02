@@ -28,24 +28,20 @@ func (ipf *IPFilterHandler) Middleware(next http.Handler) http.Handler {
 		realIP := r.Header.Get("X-Real-IP")
 		if realIP == "" {
 			ipf.logger.Warn("X-Real-IP header is missing")
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 
 		ip := net.ParseIP(realIP)
 		if ip == nil {
 			ipf.logger.Warn("invalid IP address in X-Real-IP header", zap.String("ip", realIP))
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 
 		if !ipf.trustedSubnet.Contains(ip) {
-			ipf.logger.Warn(
-				"IP address not in trusted subnet",
-				zap.String("ip", realIP),
-				zap.String("trusted_subnet", ipf.trustedSubnet.String()),
-			)
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			ipf.logger.Warn("IP address not in trusted subnet", zap.String("ip", realIP), zap.String("trusted_subnet", ipf.trustedSubnet.String()))
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 
