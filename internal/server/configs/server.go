@@ -21,6 +21,7 @@ type ServerConfig struct {
 	AuditURL        string
 	PrivateKeyPath  string
 	TrustedSubnet   string
+	GRPCAddr        string
 }
 
 type JSONServerConfig struct {
@@ -35,6 +36,7 @@ type JSONServerConfig struct {
 	AuditURL        string `json:"audit_url"`
 	PrivateKeyPath  string `json:"crypto_key"`
 	TrustedSubnet   string `json:"trusted_subnet"`
+	GRPCAddr        string `json:"grpc_address"`
 }
 
 const (
@@ -70,6 +72,7 @@ func GetConfig() (*ServerConfig, error) {
 		flagAuditURL        string
 		flagPrivateKeyPath  string
 		flagTrustedSubnet   string
+		flagGRPCAddr        string
 	)
 
 	flag.StringVar(&flagServerAddr, "a", "", "address of HTTP server")
@@ -83,6 +86,7 @@ func GetConfig() (*ServerConfig, error) {
 	flag.StringVar(&flagAuditURL, "audit-url", "", "URL for audit log server")
 	flag.StringVar(&flagPrivateKeyPath, "crypto-key", "", "path to private key file")
 	flag.StringVar(&flagTrustedSubnet, "t", "", "trusted subnet in CIDR notation")
+	flag.StringVar(&flagGRPCAddr, "g", "", "address of gRPC server")
 	flag.StringVar(&configFilePath, "config", "", "path to JSON config file")
 	flag.StringVar(&configFilePath, "c", "", "path to JSON config file")
 	flag.Parse()
@@ -131,6 +135,9 @@ func GetConfig() (*ServerConfig, error) {
 	}
 	if flagTrustedSubnet != "" {
 		cfg.TrustedSubnet = flagTrustedSubnet
+	}
+	if flagGRPCAddr != "" {
+		cfg.GRPCAddr = flagGRPCAddr
 	}
 
 	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
@@ -188,6 +195,10 @@ func GetConfig() (*ServerConfig, error) {
 		cfg.TrustedSubnet = envTrustedSubnet
 	}
 
+	if envGRPCAddr, ok := os.LookupEnv("GRPC_ADDRESS"); ok && envGRPCAddr != "" {
+		cfg.GRPCAddr = envGRPCAddr
+	}
+
 	cfg.StoreInterval = time.Duration(storeInterval) * time.Second
 
 	return &cfg, nil
@@ -241,6 +252,9 @@ func loadJSONConfig(path string, cfg *ServerConfig, storeInterval *int) error {
 	}
 	if jsonCfg.TrustedSubnet != "" {
 		cfg.TrustedSubnet = jsonCfg.TrustedSubnet
+	}
+	if jsonCfg.GRPCAddr != "" {
+		cfg.GRPCAddr = jsonCfg.GRPCAddr
 	}
 
 	return nil

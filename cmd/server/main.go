@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	grpcserver "github.com/Pro100x3mal/go-musthave-metrics/internal/server/grpc"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
@@ -53,7 +54,6 @@ func run() error {
 	defer zLog.Sync()
 
 	mainLogger := zLog.Named("main")
-	srvLogger := zLog.Named("server")
 
 	mainLogger.Info("starting application")
 
@@ -132,13 +132,34 @@ func run() error {
 		auditLogger.Info("HTTP audit observer enabled", zap.String("url", cfg.AuditURL))
 	}
 
-	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, trustedSubnet)
-
-	if err = handler.StartServer(ctx); err != nil {
-		srvLogger.Error("server failed", zap.Error(err))
+	if cfg.GRPCAddr != "" {
+		grpcLogger := zLog.Named("grpc")
+		metricsServer := grpcserver.NewMetricsServer(service, grpcLogger)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := grpcserver.StartGRPCServer(cfg.GRPCAddr, trustedSubnet, metricsServer, grpcLogger); err != nil {
+				grpcLogger.Error("gRPC server failed", zap.Error(err))
+			}
+		}()
+		mainLogger.Info("gRPC server started", zap.String("address", cfg.GRPCAddr))
+	} else {
+		srvLogger := zLog.Named("server")
+		handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, trustedSubnet)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := handler.StartServer(ctx); err != nil {
+				srvLogger.Error("HTTP server failed", zap.Error(err))
+			}
+		}()
+		mainLogger.Info("HTTP server started", zap.String("address", cfg.ServerAddr))
 	}
+
+	<-ctx.Done()
+	mainLogger.Info("shutting down servers...")
 
 	wg.Wait()
 	mainLogger.Info("application stopped gracefully")
-	return err
+	return nil
 }
