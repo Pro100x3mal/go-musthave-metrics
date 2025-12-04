@@ -40,10 +40,12 @@ cd go-musthave-metrics
 go mod download
 
 # Сборка
-make build
-# или
-go build -o bin/server ./cmd/server
-go build -o bin/agent ./cmd/agent
+go build -o cmd/server/server ./cmd/server
+go build -o cmd/agent/agent ./cmd/agent
+
+# Или запуск через go run
+go run ./cmd/server/main.go
+go run ./cmd/agent/main.go
 ```
 
 ## Быстрый старт
@@ -52,33 +54,37 @@ go build -o bin/agent ./cmd/agent
 
 ```bash
 # Простой запуск с настройками по умолчанию
-./bin/server
+./cmd/server/server
+# или через go run
+go run ./cmd/server/main.go
 
 # С указанием адреса и базы данных
-./bin/server -a localhost:8080 -d "postgres://user:pass@localhost/metrics?sslmode=disable"
+./cmd/server/server -a localhost:8080 -d "postgres://user:pass@localhost/metrics?sslmode=disable"
 
 # С файловым хранилищем
-./bin/server -a localhost:8080 -f /tmp/metrics.json -i 10 -r
+./cmd/server/server -a localhost:8080 -f /tmp/metrics.json -i 10 -r
 ```
 
 ### Запуск агента (HTTP по умолчанию)
 
 ```bash
 # Простой запуск
-./bin/agent -a localhost:8080
+./cmd/agent/agent -a localhost:8080
+# или через go run
+go run ./cmd/agent/main.go -a localhost:8080
 
 # С настройкой интервалов
-./bin/agent -a localhost:8080 -p 5 -r 15 -l 10
+./cmd/agent/agent -a localhost:8080 -p 5 -r 15 -l 10
 ```
 
 ### Запуск с gRPC
 
 ```bash
 # Сервер с gRPC (вместо HTTP)
-./bin/server -g localhost:3200
+./cmd/server/server -g localhost:3200
 
 # Агент с gRPC (вместо HTTP)
-./bin/agent -g localhost:3200
+./cmd/agent/agent -g localhost:3200
 ```
 
 ## Конфигурация
@@ -198,10 +204,10 @@ go test ./internal/server/handlers
 
 ```bash
 # Сервер
-./bin/server -a localhost:8080
+./cmd/server/server -a localhost:8080
 
 # Агент
-./bin/agent -a localhost:8080 -p 2 -r 10
+./cmd/agent/agent -a localhost:8080 -p 2 -r 10
 ```
 
 ### Пример 2: Сервер с PostgreSQL и gRPC
@@ -209,10 +215,10 @@ go test ./internal/server/handlers
 ```bash
 # Сервер
 export DATABASE_DSN="postgres://metrics:password@localhost:5432/metrics?sslmode=disable"
-./bin/server -g localhost:3200
+./cmd/server/server -g localhost:3200
 
 # Агент
-./bin/agent -g localhost:3200 -p 5 -r 15
+./cmd/agent/agent -g localhost:3200 -p 5 -r 15
 ```
 
 ### Пример 3: Файловое хранилище с шифрованием
@@ -223,7 +229,7 @@ openssl genrsa -out private.key 4096
 openssl rsa -in private.key -pubout -out public.key
 
 # Сервер
-./bin/server -a localhost:8080 \
+./cmd/server/server -a localhost:8080 \
   -f /tmp/metrics.json \
   -i 60 \
   -r \
@@ -231,7 +237,7 @@ openssl rsa -in private.key -pubout -out public.key
   -k "my-secret-key"
 
 # Агент
-./bin/agent -a localhost:8080 \
+./cmd/agent/agent -a localhost:8080 \
   -crypto-key public.key \
   -k "my-secret-key"
 ```
@@ -240,13 +246,13 @@ openssl rsa -in private.key -pubout -out public.key
 
 ```bash
 # Сервер
-./bin/server -a localhost:8080 \
+./cmd/server/server -a localhost:8080 \
   -t "192.168.1.0/24" \
   -audit-file /var/log/metrics-audit.json \
   -d "postgres://user:pass@localhost/metrics"
 
 # Агент
-./bin/agent -a localhost:8080
+./cmd/agent/agent -a localhost:8080
 ```
 
 ### Пример 5: Конфигурация через JSON файл
@@ -275,6 +281,6 @@ openssl rsa -in private.key -pubout -out public.key
 
 ```bash
 # Запуск
-./bin/server -c server-config.json
-./bin/agent -c agent-config.json
+./cmd/server/server -c server-config.json
+./cmd/agent/agent -c agent-config.json
 ```
