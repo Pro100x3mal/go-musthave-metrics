@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/proto"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -66,14 +68,14 @@ func (s *MetricsServer) UpdateMetrics(ctx context.Context, req *proto.UpdateMetr
 	return &proto.UpdateMetricsResponse{}, nil
 }
 
-func IPFilterInterceptor(trustedSubnet *net.IPNet, logger *zap.Logger) grpc.UnaryServerInterceptor {
+func IPFilterInterceptor(filter *ipfilter.IPFilter, logger *zap.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if trustedSubnet == nil {
+		if !filter.IsEnabled() {
 			return handler(ctx, req)
 		}
 
@@ -89,40 +91,61 @@ func IPFilterInterceptor(trustedSubnet *net.IPNet, logger *zap.Logger) grpc.Unar
 			return nil, status.Error(codes.PermissionDenied, "no IP address provided")
 		}
 
-		clientIP := net.ParseIP(ips[0])
-		if clientIP == nil {
-			logger.Warn("Invalid IP address", zap.String("ip", ips[0]))
-			return nil, status.Error(codes.PermissionDenied, "invalid IP address")
+		if err := filter.ValidateIP(ips[0]); err != nil {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
 		}
 
-		if !trustedSubnet.Contains(clientIP) {
-			logger.Warn("IP not in trusted subnet", zap.String("ip", clientIP.String()))
-			return nil, status.Error(codes.PermissionDenied, "IP address not in trusted subnet")
-		}
-
-		logger.Debug("IP check passed", zap.String("ip", clientIP.String()))
 		return handler(ctx, req)
 	}
 }
 
-func StartGRPCServer(addr string, trustedSubnet *net.IPNet, metricsServer *MetricsServer, logger *zap.Logger) error {
+func StartGRPCServer(ctx context.Context, addr string, filter *ipfilter.IPFilter, metricsServer *MetricsServer, logger *zap.Logger) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
 
 	var opts []grpc.ServerOption
-	if trustedSubnet != nil {
-		opts = append(opts, grpc.UnaryInterceptor(IPFilterInterceptor(trustedSubnet, logger)))
+	if filter.IsEnabled() {
+		opts = append(opts, grpc.UnaryInterceptor(IPFilterInterceptor(filter, logger)))
 	}
 
 	grpcServer := grpc.NewServer(opts...)
 	proto.RegisterMetricsServer(grpcServer, metricsServer)
 
 	logger.Info("Starting gRPC server", zap.String("address", addr))
-	if err := grpcServer.Serve(listener); err != nil {
-		return fmt.Errorf("failed to serve gRPC: %w", err)
-	}
 
-	return nil
+	serverErrCh := make(chan error, 1)
+
+	go func() {
+		if err = grpcServer.Serve(listener); err != nil {
+			serverErrCh <- fmt.Errorf("failed to serve gRPC: %w", err)
+			return
+		}
+		serverErrCh <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Info("gRPC server is shutting down...")
+
+		shutdownDone := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(shutdownDone)
+		}()
+
+		shutdownTimeout := time.After(5 * time.Second)
+		select {
+		case <-shutdownDone:
+			logger.Info("gRPC server shutdown complete")
+		case <-shutdownTimeout:
+			logger.Warn("gRPC server shutdown timeout exceeded, forcing stop")
+			grpcServer.Stop()
+		}
+
+		return nil
+	case err = <-serverErrCh:
+		return err
+	}
 }

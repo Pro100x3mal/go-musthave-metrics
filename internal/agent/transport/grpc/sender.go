@@ -3,12 +3,12 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/transport"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/proto"
+	"github.com/Pro100x3mal/go-musthave-metrics/pkg/netutils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,7 +29,7 @@ func NewSender(addr string, provider transport.MetricsProvider, logger *zap.Logg
 		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
 
-	ip, err := getOutboundIP()
+	ip, err := netutils.GetOutboundIP()
 	if err != nil {
 		logger.Warn("Failed to get local IP, using empty IP", zap.Error(err))
 		ip = ""
@@ -104,21 +104,4 @@ func (s *Sender) Close() error {
 		return s.conn.Close()
 	}
 	return nil
-}
-
-func getOutboundIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no non-loopback IP address found")
 }

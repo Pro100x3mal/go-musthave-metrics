@@ -1,46 +1,29 @@
 package middlewares
 
 import (
-	"net"
 	"net/http"
 
-	"go.uber.org/zap"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 )
 
 type IPFilterHandler struct {
-	logger        *zap.Logger
-	trustedSubnet *net.IPNet
+	filter *ipfilter.IPFilter
 }
 
-func NewIPFilterHandler(logger *zap.Logger, trustedSubnet *net.IPNet) *IPFilterHandler {
+func NewIPFilterHandler(filter *ipfilter.IPFilter) *IPFilterHandler {
 	return &IPFilterHandler{
-		logger:        logger,
-		trustedSubnet: trustedSubnet,
+		filter: filter,
 	}
 }
 
 func (ipf *IPFilterHandler) Middleware(next http.Handler) http.Handler {
-	if ipf.trustedSubnet == nil {
+	if !ipf.filter.IsEnabled() {
 		return next
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		realIP := r.Header.Get("X-Real-IP")
-		if realIP == "" {
-			ipf.logger.Warn("X-Real-IP header is missing")
-			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-			return
-		}
-
-		ip := net.ParseIP(realIP)
-		if ip == nil {
-			ipf.logger.Warn("invalid IP address in X-Real-IP header", zap.String("ip", realIP))
-			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-			return
-		}
-
-		if !ipf.trustedSubnet.Contains(ip) {
-			ipf.logger.Warn("IP address not in trusted subnet", zap.String("ip", realIP), zap.String("trusted_subnet", ipf.trustedSubnet.String()))
+		if err := ipf.filter.ValidateIP(realIP); err != nil {
 			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}

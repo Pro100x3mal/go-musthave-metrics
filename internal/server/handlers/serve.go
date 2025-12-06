@@ -5,12 +5,12 @@ import (
 	"crypto/rsa"
 	"errors"
 	"html/template"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -44,28 +44,28 @@ type MetricsServiceInterface interface {
 
 // MetricsHandler handles HTTP requests for metrics operations.
 type MetricsHandler struct {
-	reader        MetricsServiceReader
-	writer        MetricsServiceWriter
-	pinger        MetricsServicePinger
-	logger        *zap.Logger
-	cfg           *configs.ServerConfig
-	auditManager  audit.Publisher
-	tmpl          *template.Template
-	privateKey    *rsa.PrivateKey
-	trustedSubnet *net.IPNet
+	reader       MetricsServiceReader
+	writer       MetricsServiceWriter
+	pinger       MetricsServicePinger
+	logger       *zap.Logger
+	cfg          *configs.ServerConfig
+	auditManager audit.Publisher
+	tmpl         *template.Template
+	privateKey   *rsa.PrivateKey
+	ipFilter     *ipfilter.IPFilter
 }
 
 // NewMetricsHandler creates a new MetricsHandler with the provided service, logger, configuration and audit manager.
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher, privateKey *rsa.PrivateKey, trustedSubnet *net.IPNet) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher, privateKey *rsa.PrivateKey, ipFilter *ipfilter.IPFilter) *MetricsHandler {
 	mh := &MetricsHandler{
-		reader:        service,
-		writer:        service,
-		logger:        logger,
-		cfg:           cfg,
-		auditManager:  auditManager,
-		tmpl:          template.Must(template.New("metrics").Parse(metricsTemplate)),
-		privateKey:    privateKey,
-		trustedSubnet: trustedSubnet,
+		reader:       service,
+		writer:       service,
+		logger:       logger,
+		cfg:          cfg,
+		auditManager: auditManager,
+		tmpl:         template.Must(template.New("metrics").Parse(metricsTemplate)),
+		privateKey:   privateKey,
+		ipFilter:     ipFilter,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {

@@ -11,12 +11,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/transport"
 	"github.com/Pro100x3mal/go-musthave-metrics/pkg/crypto"
+	"github.com/Pro100x3mal/go-musthave-metrics/pkg/netutils"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
@@ -36,7 +36,7 @@ func NewSender(cfg *configs.AgentConfig, publicKey *rsa.PublicKey, provider tran
 		SetRetryMaxWaitTime(5 * time.Second)
 
 	c.OnBeforeRequest(func(_ *resty.Client, r *resty.Request) error {
-		realIP, err := getOutboundIP()
+		realIP, err := netutils.GetOutboundIP()
 		if err != nil {
 			logger.Warn("Failed to get local IP", zap.Error(err))
 		} else {
@@ -122,21 +122,4 @@ func signBody(body []byte, key string) string {
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write(body)
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-func getOutboundIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no non-loopback IP address found")
 }

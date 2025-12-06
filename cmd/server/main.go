@@ -14,6 +14,7 @@ import (
 	grpcserver "github.com/Pro100x3mal/go-musthave-metrics/internal/server/grpc"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
@@ -77,6 +78,9 @@ func run() error {
 		mainLogger.Info("trusted subnet configured", zap.String("subnet", cfg.TrustedSubnet))
 	}
 
+	ipFilterLogger := zLog.Named("ipfilter")
+	ipFilterService := ipfilter.NewIPFilter(trustedSubnet, ipFilterLogger)
+
 	var repo repositories.Repository
 	var wg sync.WaitGroup
 
@@ -138,14 +142,14 @@ func run() error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := grpcserver.StartGRPCServer(cfg.GRPCAddr, trustedSubnet, metricsServer, grpcLogger); err != nil {
+			if err := grpcserver.StartGRPCServer(ctx, cfg.GRPCAddr, ipFilterService, metricsServer, grpcLogger); err != nil {
 				grpcLogger.Error("gRPC server failed", zap.Error(err))
 			}
 		}()
 		mainLogger.Info("gRPC server started", zap.String("address", cfg.GRPCAddr))
 	} else {
 		srvLogger := zLog.Named("server")
-		handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, trustedSubnet)
+		handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, ipFilterService)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -159,7 +163,17 @@ func run() error {
 	<-ctx.Done()
 	mainLogger.Info("shutting down servers...")
 
-	wg.Wait()
-	mainLogger.Info("application stopped gracefully")
+	shutdownDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownDone:
+		mainLogger.Info("application stopped gracefully")
+	case <-time.After(10 * time.Second):
+		mainLogger.Warn("shutdown timeout exceeded, forcing exit")
+	}
 	return nil
 }
