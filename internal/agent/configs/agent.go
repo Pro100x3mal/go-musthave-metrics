@@ -17,6 +17,7 @@ type AgentConfig struct {
 	Key            string
 	RateLimit      int
 	PublicKeyPath  string
+	GRPCAddr       string
 }
 
 type JSONAgentConfig struct {
@@ -27,6 +28,7 @@ type JSONAgentConfig struct {
 	Key            string `json:"signing_key"`
 	RateLimit      *int   `json:"rate_limit"`
 	PublicKeyPath  string `json:"crypto_key"`
+	GRPCAddr       string `json:"grpc_address"`
 }
 
 const (
@@ -58,6 +60,7 @@ func GetConfig() (*AgentConfig, error) {
 		flagKey            string
 		flagRateLimit      int
 		flagPublicKeyPath  string
+		flagGRPCAddr       string
 	)
 
 	flag.StringVar(&flagServerAddr, "a", "", "address of HTTP server")
@@ -67,6 +70,7 @@ func GetConfig() (*AgentConfig, error) {
 	flag.StringVar(&flagKey, "k", "", "signing key")
 	flag.IntVar(&flagRateLimit, "l", -1, "report rate limit")
 	flag.StringVar(&flagPublicKeyPath, "crypto-key", "", "path to public key file")
+	flag.StringVar(&flagGRPCAddr, "g", "", "address of gRPC server")
 	flag.StringVar(&configFilePath, "config", "", "path to JSON config file")
 	flag.StringVar(&configFilePath, "c", "", "path to JSON config file")
 	flag.Parse()
@@ -103,6 +107,9 @@ func GetConfig() (*AgentConfig, error) {
 	}
 	if flagPublicKeyPath != "" {
 		cfg.PublicKeyPath = flagPublicKeyPath
+	}
+	if flagGRPCAddr != "" {
+		cfg.GRPCAddr = flagGRPCAddr
 	}
 
 	if envServerAddr, ok := os.LookupEnv("ADDRESS"); ok && envServerAddr != "" {
@@ -143,6 +150,10 @@ func GetConfig() (*AgentConfig, error) {
 
 	if envPublicKeyPath, ok := os.LookupEnv("CRYPTO_KEY"); ok && envPublicKeyPath != "" {
 		cfg.PublicKeyPath = envPublicKeyPath
+	}
+
+	if envGRPCAddr, ok := os.LookupEnv("GRPC_ADDRESS"); ok && envGRPCAddr != "" {
+		cfg.GRPCAddr = envGRPCAddr
 	}
 
 	cfg.PollInterval = time.Duration(pollSec) * time.Second
@@ -192,6 +203,9 @@ func loadJSONConfig(path string, cfg *AgentConfig, pollSec *int, reportSec *int)
 	}
 	if jsonCfg.RateLimit != nil {
 		cfg.RateLimit = *jsonCfg.RateLimit
+	}
+	if jsonCfg.GRPCAddr != "" {
+		cfg.GRPCAddr = jsonCfg.GRPCAddr
 	}
 
 	return nil

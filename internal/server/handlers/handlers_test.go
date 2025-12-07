@@ -12,6 +12,7 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	mocksvc "github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers/mocks"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
@@ -37,7 +38,8 @@ func setupTestHandler(t *testing.T, setupMock func(*mocksvc.MockMetricsServiceIn
 	zl := zap.NewNop()
 	cfg := &configs.ServerConfig{}
 	mockAud := &mockAuditManager{}
-	handler := NewMetricsHandler(mockService, zl, cfg, mockAud, nil)
+	ipFilter := ipfilter.NewIPFilter(nil, zl)
+	handler := NewMetricsHandler(mockService, zl, cfg, mockAud, nil, ipFilter)
 
 	r := chi.NewRouter()
 	initRoutes(r, handler)

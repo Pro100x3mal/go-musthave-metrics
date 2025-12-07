@@ -15,6 +15,9 @@ import (
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/repositories"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/services"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/agent/transport"
+	grpctransport "github.com/Pro100x3mal/go-musthave-metrics/internal/agent/transport/grpc"
+	httptransport "github.com/Pro100x3mal/go-musthave-metrics/internal/agent/transport/http"
 	"github.com/Pro100x3mal/go-musthave-metrics/pkg/crypto"
 	"go.uber.org/zap"
 )
@@ -63,7 +66,21 @@ func run() error {
 		logger.Info("public key loaded successfully")
 	}
 
-	newClient := services.NewClient(cfg, publicKey)
+	var sender transport.Sender
+	if cfg.GRPCAddr != "" {
+		grpcSender, err := grpctransport.NewSender(cfg.GRPCAddr, queryService, logger)
+		if err != nil {
+			logger.Error("failed to create gRPC sender", zap.Error(err))
+			return fmt.Errorf("failed to create gRPC sender: %w", err)
+		}
+		defer grpcSender.Close()
+		sender = grpcSender
+		logger.Info("using gRPC transport", zap.String("address", cfg.GRPCAddr))
+	} else {
+		sender = httptransport.NewSender(cfg, publicKey, queryService, logger)
+		logger.Info("using HTTP transport", zap.String("address", cfg.ServerAddr))
+	}
+
 	pool := services.NewWorkerPool(cfg)
 	pool.Start()
 
@@ -100,7 +117,7 @@ func run() error {
 
 		case <-tickerReport.C:
 			pool.Submit(func() {
-				if err := queryService.SendMetrics(ctx, newClient); err != nil {
+				if err = sender.SendMetrics(ctx); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						logger.Debug("request cancelled")
 						return
@@ -108,7 +125,6 @@ func run() error {
 					logger.Error("failed to send metrics", zap.Error(err))
 					return
 				}
-				logger.Info("metrics sent successfully")
 
 				if err := collectService.ResetPollCount(); err != nil {
 					logger.Error("failed to reset poll count", zap.Error(err))

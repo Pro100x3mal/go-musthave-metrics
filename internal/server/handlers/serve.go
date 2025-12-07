@@ -10,6 +10,7 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -51,10 +52,11 @@ type MetricsHandler struct {
 	auditManager audit.Publisher
 	tmpl         *template.Template
 	privateKey   *rsa.PrivateKey
+	ipFilter     *ipfilter.IPFilter
 }
 
 // NewMetricsHandler creates a new MetricsHandler with the provided service, logger, configuration and audit manager.
-func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher, privateKey *rsa.PrivateKey) *MetricsHandler {
+func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg *configs.ServerConfig, auditManager audit.Publisher, privateKey *rsa.PrivateKey, ipFilter *ipfilter.IPFilter) *MetricsHandler {
 	mh := &MetricsHandler{
 		reader:       service,
 		writer:       service,
@@ -63,6 +65,7 @@ func NewMetricsHandler(service MetricsServiceInterface, logger *zap.Logger, cfg 
 		auditManager: auditManager,
 		tmpl:         template.Must(template.New("metrics").Parse(metricsTemplate)),
 		privateKey:   privateKey,
+		ipFilter:     ipFilter,
 	}
 
 	if p, ok := service.(MetricsServicePinger); ok {

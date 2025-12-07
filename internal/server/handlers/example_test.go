@@ -12,6 +12,7 @@ import (
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
@@ -37,7 +38,8 @@ func setupTestServer() *httptest.Server {
 	log, _ := logger.NewLogger(cfg)
 
 	// Create handler
-	handler := handlers.NewMetricsHandler(service, log, cfg, nil, nil)
+	ipFilter := ipfilter.NewIPFilter(nil, log)
+	handler := handlers.NewMetricsHandler(service, log, cfg, nil, nil, ipFilter)
 
 	// Setup router
 	r := chi.NewRouter()

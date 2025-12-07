@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"net"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/configs"
+	grpcserver "github.com/Pro100x3mal/go-musthave-metrics/internal/server/grpc"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/handlers"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/audit"
+	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/ipfilter"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/infrastructure/logger"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/models"
 	"github.com/Pro100x3mal/go-musthave-metrics/internal/server/repositories"
@@ -52,7 +55,6 @@ func run() error {
 	defer zLog.Sync()
 
 	mainLogger := zLog.Named("main")
-	srvLogger := zLog.Named("server")
 
 	mainLogger.Info("starting application")
 
@@ -65,6 +67,19 @@ func run() error {
 		}
 		mainLogger.Info("private key loaded successfully")
 	}
+
+	var trustedSubnet *net.IPNet
+	if cfg.TrustedSubnet != "" {
+		_, trustedSubnet, err = net.ParseCIDR(cfg.TrustedSubnet)
+		if err != nil {
+			mainLogger.Error("failed to parse trusted subnet", zap.Error(err), zap.String("subnet", cfg.TrustedSubnet))
+			return fmt.Errorf("invalid trusted subnet: %w", err)
+		}
+		mainLogger.Info("trusted subnet configured", zap.String("subnet", cfg.TrustedSubnet))
+	}
+
+	ipFilterLogger := zLog.Named("ipfilter")
+	ipFilterService := ipfilter.NewIPFilter(trustedSubnet, ipFilterLogger)
 
 	var repo repositories.Repository
 	var wg sync.WaitGroup
@@ -121,13 +136,44 @@ func run() error {
 		auditLogger.Info("HTTP audit observer enabled", zap.String("url", cfg.AuditURL))
 	}
 
-	handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey)
-
-	if err = handler.StartServer(ctx); err != nil {
-		srvLogger.Error("server failed", zap.Error(err))
+	if cfg.GRPCAddr != "" {
+		grpcLogger := zLog.Named("grpc")
+		metricsServer := grpcserver.NewMetricsServer(service, grpcLogger)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := grpcserver.StartGRPCServer(ctx, cfg.GRPCAddr, ipFilterService, metricsServer, grpcLogger); err != nil {
+				grpcLogger.Error("gRPC server failed", zap.Error(err))
+			}
+		}()
+		mainLogger.Info("gRPC server started", zap.String("address", cfg.GRPCAddr))
+	} else {
+		srvLogger := zLog.Named("server")
+		handler := handlers.NewMetricsHandler(service, srvLogger, cfg, auditManager, privateKey, ipFilterService)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := handler.StartServer(ctx); err != nil {
+				srvLogger.Error("HTTP server failed", zap.Error(err))
+			}
+		}()
+		mainLogger.Info("HTTP server started", zap.String("address", cfg.ServerAddr))
 	}
 
-	wg.Wait()
-	mainLogger.Info("application stopped gracefully")
-	return err
+	<-ctx.Done()
+	mainLogger.Info("shutting down servers...")
+
+	shutdownDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(shutdownDone)
+	}()
+
+	select {
+	case <-shutdownDone:
+		mainLogger.Info("application stopped gracefully")
+	case <-time.After(10 * time.Second):
+		mainLogger.Warn("shutdown timeout exceeded, forcing exit")
+	}
+	return nil
 }
